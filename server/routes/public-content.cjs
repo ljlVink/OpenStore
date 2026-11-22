@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const db = require('../database.cjs');
-const { getAppGalleryTopic } = require('../lib/appgallery-topics.cjs');
+const { getAppGalleryTopic, getAppGalleryTopics } = require('../lib/appgallery-topics.cjs');
 
 const router = express.Router();
 
@@ -12,6 +12,16 @@ router.get('/api/public/apps', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
+});
+
+// 华为应用市场「探索」页当前展示的专题
+router.get('/api/public/topics', async (req, res) => {
+  try {
+    res.json({ items: await getAppGalleryTopics() });
+  } catch (error) {
+    console.warn('[appgallery-topics] 专题列表查询失败：', error.message);
+    res.status(502).json({ error: '无法加载华为应用市场专题列表' });
+  }
 });
 
 router.get('/api/public/topics/:id', async (req, res) => {

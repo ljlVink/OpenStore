@@ -161,7 +161,7 @@ const MARQUEE_COPIES = 3;
 
 const router = useRouter();
 const loading = ref(false);
-const topic = ref<(FullSubstanceInfo & { created_at: string }) | null>(null);
+const topic = ref<(FullSubstanceInfo & { label: string }) | null>(null);
 /** 加载失败的图标地址：换成兜底图标，避免一直挂破图 */
 const failedIcons = ref(new Set<string>());
 
@@ -270,7 +270,7 @@ const slides = computed<SpotlightSlide[]>(() => {
       subtitle: current.subtitle?.trim() || '',
       icons,
       count: current.apps?.length || 0,
-      metaText: formatDate(current.created_at),
+      metaText: current.label,
       cta: '查看专题',
       go: () =>
         router.push({
@@ -370,15 +370,10 @@ const MARQUEE_MAX_DURATION = 260;
 const rowDuration = (row: string[]) =>
   Math.min(MARQUEE_MAX_DURATION, Math.max(10, Math.round(row.length * MARQUEE_SECONDS_PER_ICON)));
 
-const formatDate = (value?: string) => {
-  if (!value) return '';
-  return new Date(value).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
-};
-
 const loadSpotlight = async () => {
   loading.value = true;
   try {
-    const { data: list } = await getTopics(1, 60);
+    const list = await getTopics();
     if (!list.length) {
       topic.value = null;
       return;
@@ -391,7 +386,7 @@ const loadSpotlight = async () => {
     const details = await Promise.all(
       candidates.map(async (item) => {
         const detail = await getTopicDetail(item.substance_id).catch(() => null);
-        return detail && { ...detail, created_at: item.created_at };
+        return detail && { ...detail, label: item.label };
       })
     );
     const valid = details.filter((item) => item !== null);

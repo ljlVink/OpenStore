@@ -412,12 +412,13 @@ export const uploadFile = async (file: File): Promise<{ url: string }> => {
 };
 
 
-// Topics (Substances)
+// Topics (Substances)：华为应用市场「探索」页当前展示的专题
 export interface ShortSubstanceInfo {
   substance_id: string;
   title: string;
-  subtitle?: string | null;
-  created_at: string;
+  subtitle: string;
+  /** 华为给专题打的栏目名，如「编辑精选」「指南」 */
+  label: string;
 }
 
 export interface ShortAppInfo {
@@ -432,42 +433,9 @@ export interface FullSubstanceInfo extends Pick<ShortSubstanceInfo, 'substance_i
   apps: ShortAppInfo[];
 }
 
-// 上游 0.12.0 起专题列表分页为 1-based（第 1 页传 page=1）
-export const getTopics = async (page: number = 1, pageSize: number = 20): Promise<{ data: ShortSubstanceInfo[]; total: number }> => {
-  try {
-    const params = {
-      page_size: pageSize,
-      sort: 'created_at',
-      desc: true
-    };
-    const response = await apiClient.get(`/v0/substance/list/${page}`, { params });
-    
-    let list: any[] = [];
-    const responseData = response.data || response;
-    let total = 0;
-
-    if (Array.isArray(responseData)) {
-      list = responseData;
-      total = list.length;
-    } else if (responseData && responseData.data && Array.isArray(responseData.data.data)) {
-      list = responseData.data.data;
-      total = responseData.data.total_count || responseData.total || list.length;
-    } else if (responseData && Array.isArray(responseData.data)) {
-      list = responseData.data;
-      total = responseData.total || list.length;
-    } else if (responseData && responseData.items && Array.isArray(responseData.items)) {
-        list = responseData.items;
-        total = responseData.total || list.length;
-    }
-
-    return {
-      data: list,
-      total: total
-    };
-  } catch (error) {
-    console.error('Failed to fetch topics', error);
-    throw error;
-  }
+export const getTopics = async (): Promise<ShortSubstanceInfo[]> => {
+  const { data } = await apiClient.get<{ items: ShortSubstanceInfo[] }>('/public/topics');
+  return data.items;
 };
 
 export const getTopicDetail = async (substanceId: string): Promise<FullSubstanceInfo> => {

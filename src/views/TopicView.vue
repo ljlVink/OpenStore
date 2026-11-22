@@ -5,8 +5,8 @@
         <h1>精选专题</h1>
         <p>跟随专题逛鸿蒙生态，发现值得一试的应用</p>
       </div>
-      <div v-if="total > 0" class="header-side">
-        <span class="count-chip">已加载 {{ topics.length }} / {{ total }}</span>
+      <div v-if="topics.length > 0" class="header-side">
+        <span class="count-chip">共 {{ topics.length }} 个</span>
         <el-tooltip content="刷新" placement="bottom">
           <el-button
             class="refresh-btn"
@@ -54,7 +54,7 @@
           @keydown.enter="goToDetail(topic)"
           @keydown.space.prevent="goToDetail(topic)"
         >
-          <!-- 专题没有封面图，用该专题下的应用图标横向排一行 -->
+          <!-- 用该专题下的应用图标横向排一行 -->
           <div class="topic-icons">
             <template v-if="iconsOf(topic.substance_id).icons.length">
               <el-image
@@ -96,8 +96,8 @@
           </div>
 
           <footer class="topic-foot">
-            <el-icon><Calendar /></el-icon>
-            <span>{{ formatDate(topic.created_at) }}</span>
+            <el-icon><CollectionTag /></el-icon>
+            <span>{{ topic.label || '应用市场专题' }}</span>
             <el-icon class="foot-arrow"><ArrowRight /></el-icon>
           </footer>
         </article>
@@ -105,22 +105,16 @@
 
       <el-empty v-else description="暂无专题" />
 
-      <div v-if="hasMore" class="load-more">
-        <el-button round :loading="loading" @click="loadMore">
-          加载更多
-          <span class="load-more-hint">还有 {{ Math.max(total - topics.length, 0) }} 个</span>
-        </el-button>
-      </div>
-      <p v-else-if="topics.length" class="load-end">已经到底啦 · 共 {{ total }} 个专题</p>
+      <p v-if="topics.length" class="load-end">已经到底啦 · 共 {{ topics.length }} 个专题</p>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { getTopics, getTopicDetail, type ShortSubstanceInfo } from '../services/api';
-import { ArrowRight, Calendar, Picture, Refresh } from '@element-plus/icons-vue';
+import { ArrowRight, CollectionTag, Picture, Refresh } from '@element-plus/icons-vue';
 
 defineOptions({
   name: 'TopicView'
@@ -128,16 +122,10 @@ defineOptions({
 
 const router = useRouter();
 
+/** 华为应用市场「探索」页当前展示的专题，接口一次返回全部 */
 const topics = ref<ShortSubstanceInfo[]>([]);
 const loading = ref(false);
 const error = ref('');
-// 上游自 0.12.0 起分页统一为 1-based（page=0 会被当成第 1 页），
-// 所以这里必须从 1 开始，否则"加载更多"会把第 1 页重复拉一遍。
-const currentPage = ref(1);
-const pageSize = 20;
-const total = ref(0);
-
-const hasMore = computed(() => topics.value.length < total.value);
 
 /* ---------------- 卡片上的应用图标 ---------------- */
 
@@ -228,29 +216,12 @@ const fillerCount = (id: string) => {
 
 /* ---------------- 列表数据 ---------------- */
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-};
-
-const fetchTopics = async (reset = false) => {
-  if (reset) {
-    currentPage.value = 1;
-    // 手动刷新时保留现有列表（只把 loading 交给按钮上的转圈），
-    // 否则整片网格会先闪成骨架再回来
-  }
-
+const fetchTopics = async () => {
   loading.value = true;
   error.value = '';
 
   try {
-    const res = await getTopics(currentPage.value, pageSize);
-    topics.value = reset ? res.data : [...topics.value, ...res.data];
-    total.value = res.total;
+    topics.value = await getTopics();
     ensureTopicApps(topics.value.map((t) => t.substance_id));
 
     // 网格渲染出来后再量一次列宽，并在宽度变化时重新计算图标数量/尺寸
@@ -265,11 +236,6 @@ const fetchTopics = async (reset = false) => {
   }
 };
 
-const loadMore = () => {
-  currentPage.value += 1;
-  fetchTopics();
-};
-
 /** 刷新时让刷新图标转一会儿，太短的请求也保证有可见的动效反馈 */
 const MIN_SPIN_MS = 700;
 const refreshing = ref(false);
@@ -279,7 +245,7 @@ const refresh = async () => {
   refreshing.value = true;
   const startedAt = Date.now();
   try {
-    await fetchTopics(true);
+    await fetchTopics();
   } finally {
     const rest = Math.max(0, MIN_SPIN_MS - (Date.now() - startedAt));
     window.setTimeout(() => {
@@ -298,7 +264,7 @@ const goToDetail = (topic: ShortSubstanceInfo) => {
 let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
-  fetchTopics(true);
+  fetchTopics();
   measureGrid();
   window.addEventListener('resize', measureGrid);
   if (typeof ResizeObserver !== 'undefined') {
@@ -537,19 +503,7 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-/* ---------- 加载更多 ---------- */
-
-.load-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 28px;
-}
-
-.load-more-hint {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
-}
+/* ---------- 列表底部 ---------- */
 
 .load-end {
   margin: 26px 0 0;

@@ -251,7 +251,7 @@ const pages = ref<PageProbe[]>([
     key: 'topics',
     name: '专题',
     route: '/topics',
-    probePath: '/api/v0/substance/list/1?page_size=1',
+    probePath: '/api/public/topics',
   }),
   createProbe<PageProbe>({
     key: 'updates',

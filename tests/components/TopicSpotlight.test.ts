@@ -12,12 +12,11 @@ vi.mock('vue-router', () => ({
 
 // 本周上新 + 专题两张海报；今日更新无数据，不出现
 vi.mock('../../src/services/api', () => ({
-  getTopics: vi.fn(async () => ({ data: [{ substance_id: 1, title: '专题' }] })),
+  getTopics: vi.fn(async () => [{ substance_id: '1', title: '专题', subtitle: '', label: '编辑精选' }]),
   getTopicDetail: vi.fn(async () => ({
     substance_id: 1,
     title: '本周口碑应用',
     subtitle: '编辑精选',
-    created_at: '2026-10-01T00:00:00+08:00',
     apps: [
       { icon_url: 'https://cdn.test/topic-1.png' },
       { icon_url: 'https://cdn.test/topic-2.png' },
@@ -91,7 +90,7 @@ describe('TopicSpotlight 预热与轮播', () => {
     vi.stubGlobal('Image', FakeImage);
     vi.useFakeTimers();
     // 统一默认数据，避免用例间 mock 泄漏
-    vi.mocked(spotlightApi.getTopics).mockResolvedValue({ data: [{ substance_id: 1, title: '专题' }] } as any);
+    vi.mocked(spotlightApi.getTopics).mockResolvedValue([{ substance_id: '1', title: '专题', subtitle: '', label: '编辑精选' }]);
     vi.mocked(spotlightApi.getNewAppsByDateRange).mockResolvedValue({
       data: [
         { info: { icon_url: 'https://cdn.test/week-1.png' } },
@@ -103,7 +102,6 @@ describe('TopicSpotlight 预热与轮播', () => {
       substance_id: 1,
       title: '本周口碑应用',
       subtitle: '编辑精选',
-      created_at: '2026-10-01T00:00:00+08:00',
       apps: [
         { icon_url: 'https://cdn.test/topic-1.png' },
         { icon_url: 'https://cdn.test/topic-2.png' },
