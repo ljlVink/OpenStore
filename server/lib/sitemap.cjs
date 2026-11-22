@@ -1,19 +1,18 @@
 /*
  * 运行时的 sitemap.xml 生成。
  *
- * 内容：静态栏目页 + 应用详情页（apps.original_id）+ 已发布文章页（blogs.slug）。
+ * 内容：静态栏目页 + 应用详情页（apps.original_id）。
  * 构建期 dist/sitemap.xml 只有栏目页兜底，详情页由此处补充。
  * 结果缓存 10 分钟；站点 URL 变更时由调用方 invalidateSitemapCache() 清除。
  */
 const db = require('../database.cjs');
 
 /** 与 scripts/generate-sitemap.js 的兜底清单保持一致 */
-const STATIC_ROUTES = ['/', '/apps', '/updates', '/topics', '/articles', '/about'];
+const STATIC_ROUTES = ['/', '/apps', '/updates', '/topics', '/about'];
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 /** 详情页条数上限，避免条目过多 */
 const MAX_APP_URLS = 3000;
-const MAX_ARTICLE_URLS = 2000;
 
 /** 静态页在 sitemap 中的优先级 */
 const PRIORITY = {
@@ -21,7 +20,6 @@ const PRIORITY = {
   '/apps': '0.8',
   '/updates': '0.8',
   '/topics': '0.8',
-  '/articles': '0.8',
   '/about': '0.5'
 };
 
@@ -83,22 +81,6 @@ async function buildSitemap(siteUrl) {
     entries.push({
       loc: `${origin}/apps/${encodePath(app.original_id)}`,
       lastmod: toDate(app.updated_at) || today,
-      changefreq: 'weekly',
-      priority: '0.6'
-    });
-  }
-
-  // 文章详情页：仅已发布
-  const blogs = await all(
-    `SELECT slug, updated_at, published_at FROM blogs
-      WHERE status = 'published' AND slug IS NOT NULL AND slug != ''
-      ORDER BY COALESCE(updated_at, published_at) DESC LIMIT ?`,
-    [MAX_ARTICLE_URLS]
-  );
-  for (const blog of blogs) {
-    entries.push({
-      loc: `${origin}/articles/${encodePath(blog.slug)}`,
-      lastmod: toDate(blog.updated_at || blog.published_at) || today,
       changefreq: 'weekly',
       priority: '0.6'
     });

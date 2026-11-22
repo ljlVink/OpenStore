@@ -30,9 +30,9 @@ describe('接口体检的路由挑选', () => {
       '/api/admin/live',
     ];
 
-    const routes = collectPerfCheckRoutes(app([...skipped.map((p) => leaf(p)), leaf('/api/public/blogs')]));
+    const routes = collectPerfCheckRoutes(app([...skipped.map((p) => leaf(p)), leaf('/api/public/announcements')]));
 
-    expect(routes).toEqual(['/api/public/blogs']);
+    expect(routes).toEqual(['/api/public/announcements']);
   });
 
   it('跳过动态参数、SSE 流、写接口与非 /api 路径', () => {

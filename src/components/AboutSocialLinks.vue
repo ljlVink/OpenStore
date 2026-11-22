@@ -1,49 +1,26 @@
 <template>
-  <!-- 关于页「联系我们」卡片的内容：星标 / 仓库 / 作者是配置里的自动项 -->
-  <div v-if="chips.length" class="social-links">
-    <component
-      :is="chip.url ? 'a' : 'span'"
-      v-for="chip in chips"
-      :key="chip.key"
-      v-bind="chip.url ? { href: chip.url, target: '_blank', rel: 'noopener' } : {}"
+  <div class="social-links">
+    <a
+      :href="TELEGRAM_CONTACT_URL"
+      target="_blank"
+      rel="noopener noreferrer"
       class="social-chip"
-      :class="{ 'is-link': !!chip.url, 'is-icon-only': !chip.label }"
-      :title="chip.label || chip.hint || ''"
-      :aria-label="chip.label || chip.hint || ''"
+      aria-label="Telegram"
     >
-      <AboutSocialIcon :name="chip.icon" />
-      <span v-if="chip.label" class="social-chip-label">{{ chip.label }}</span>
-    </component>
+      <!-- Telegram 官方品牌图标（simple-icons，CC0） -->
+      <svg class="about-social-svg" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"
+        />
+      </svg>
+      <span>Telegram</span>
+    </a>
   </div>
-  <p v-else class="empty-tip">还没有配置联系我们</p>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import AboutSocialIcon from './AboutSocialIcon.vue';
-import { resolveSocialLinks, type SocialLinkItem } from '../utils/about';
-
-const props = withDefaults(
-  defineProps<{
-    links?: SocialLinkItem[];
-    authorName?: string;
-    authorGithub?: string;
-    /** 已经清洗成 owner/repo 的仓库路径 */
-    repoName?: string;
-    /** 没取到星标时传 null */
-    repoStars?: number | null;
-  }>(),
-  { links: () => [], repoStars: null }
-);
-
-const chips = computed(() =>
-  resolveSocialLinks(props.links, {
-    authorName: props.authorName,
-    authorGithub: props.authorGithub,
-    repoName: props.repoName,
-    repoStars: props.repoStars
-  }).map((item, index) => ({ ...item, key: `${item.icon}-${index}` }))
-);
+import { TELEGRAM_CONTACT_URL } from '../utils/about';
 </script>
 
 <style scoped>
@@ -54,7 +31,7 @@ const chips = computed(() =>
 }
 
 /*
-  无边框淡底胶囊：只靠一层浅填充区分，不再描边，和技术栈标签观感一致。
+  无边框淡底胶囊：只靠一层浅填充区分，不再描边。
   比原来高一点（34px），图标也跟着放大，更好认、更好点。
 */
 .social-chip {
@@ -66,9 +43,9 @@ const chips = computed(() =>
   border-radius: 999px;
   /* 去掉描边：留一条透明边框占位，悬停时换色不会让高度抖动 */
   border: 1px solid transparent;
-  background-color: var(--el-fill-color-light);
+  background-color: var(--el-color-primary-light-9);
   font-size: 13px;
-  color: var(--el-text-color-regular);
+  color: var(--el-color-primary);
   text-decoration: none;
   white-space: nowrap;
   transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease,
@@ -76,39 +53,16 @@ const chips = computed(() =>
 }
 
 /* 图标略大于文字，视觉上和文字基线对齐 */
-.social-chip :deep(.el-icon),
-.social-chip :deep(.about-social-svg) {
+.about-social-svg {
+  display: block;
   font-size: 17px;
   flex: 0 0 auto;
 }
 
-/* 可点击的条目：主色文字 + 起点缀色，悬停时抬起并加一层柔和阴影 */
-.social-chip.is-link {
-  color: var(--el-color-primary);
-  background-color: var(--el-color-primary-light-9);
-}
-
-.social-chip.is-link:hover {
+.social-chip:hover {
   background-color: var(--el-color-primary-light-8);
   box-shadow: 0 6px 16px -8px rgba(15, 23, 42, 0.5);
   transform: translateY(-2px);
-}
-
-/*
-  名称留空：只留一个图标。
-  做成等宽圆形，而不是靠 padding 撑出来 —— 否则不同宽度的图标会让
-  一排胶囊宽度参差，看着不齐。
-*/
-.social-chip.is-icon-only {
-  width: 34px;
-  padding: 0;
-  justify-content: center;
-}
-
-.empty-tip {
-  margin: 0;
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
 }
 
 /* 尊重系统的「减少动态效果」设置 */
@@ -117,22 +71,9 @@ const chips = computed(() =>
     transition: none;
   }
 
-  .social-chip.is-link:hover {
+  .social-chip:hover {
     transform: none;
   }
 }
 
-@media (max-width: 640px) {
-  /* 窄屏只留图标，文字藏起来避免换行成一堆胶囊 */
-  .social-chip-label {
-    display: none;
-  }
-
-  /* 有名称的胶囊这时候也只剩图标，统一收成圆形，和「留空」的保持一致 */
-  .social-chip {
-    width: 34px;
-    padding: 0;
-    justify-content: center;
-  }
-}
 </style>

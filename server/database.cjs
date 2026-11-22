@@ -3,7 +3,6 @@ const path = require('path');
 // IndexNow key 需要在建表阶段就随机生成一次，这里要用到 crypto
 const crypto = require('crypto');
 const defaultSiteCards = require('./lib/site-card-defaults.cjs');
-const { DEFAULT_TECH_STACK, DEFAULT_SOCIAL_LINKS } = require('./lib/about-defaults.cjs');
 
 const dbPath = path.resolve(__dirname, 'visitors.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -121,84 +120,6 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS blog_categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    parent_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS blog_tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    color TEXT,
-    group_name TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS blogs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    content_html TEXT,
-    content_markdown TEXT,
-    summary TEXT,
-    cover_url TEXT,
-    cover_focus TEXT,
-    author_names TEXT,
-    status TEXT CHECK(status IN ('draft','published','offline')) DEFAULT 'draft',
-    category_id INTEGER,
-    seo_title TEXT,
-    seo_description TEXT,
-    seo_keywords TEXT,
-    password TEXT,
-    allow_comments INTEGER DEFAULT 1,
-    scheduled_at DATETIME,
-    published_at DATETIME,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS blog_tag_relations (
-    blog_id INTEGER NOT NULL,
-    tag_id INTEGER NOT NULL,
-    PRIMARY KEY (blog_id, tag_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS blog_app_relations (
-    blog_id INTEGER NOT NULL,
-    app_id INTEGER NOT NULL,
-    PRIMARY KEY (blog_id, app_id)
-  )`);
-
-  // New table for standalone article-related apps (decoupled from main apps table)
-  db.run(`CREATE TABLE IF NOT EXISTS blog_related_apps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    blog_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    icon_url TEXT,
-    developer_name TEXT,
-    kind_name TEXT,
-    average_rating TEXT,
-    download_count_str TEXT,
-    original_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    blog_id INTEGER NOT NULL,
-    parent_id INTEGER,
-    nickname TEXT NOT NULL,
-    email TEXT,
-    content TEXT NOT NULL,
-    status TEXT DEFAULT 'pending', -- pending, approved, spam, trash
-    ip_address TEXT,
-    user_agent TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
   db.run(`CREATE TABLE IF NOT EXISTS env_vars (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT NOT NULL UNIQUE,
@@ -297,16 +218,6 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS changelogs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    version TEXT NOT NULL,
-    content_markdown TEXT,
-    content_html TEXT,
-    release_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
   db.run(`CREATE TABLE IF NOT EXISTS site_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     page TEXT NOT NULL DEFAULT 'home',
@@ -320,7 +231,7 @@ db.serialize(() => {
   )`);
 
   const seedSiteCards = () => {
-    db.run(`DELETE FROM site_cards WHERE page = 'about' AND key = 'feedback'`);
+    db.run(`DELETE FROM site_cards WHERE page = 'about' AND key IN ('feedback', 'tech-stack', 'changelogs', 'author')`);
     db.run(`DELETE FROM site_cards WHERE page = 'system' AND key = 'music'`);
     defaultSiteCards.forEach(card => {
       db.run(
@@ -361,15 +272,9 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY CHECK (id = 1),
     content_html TEXT,
     content_markdown TEXT,
-    author_name TEXT,
-    author_avatar TEXT,
-    author_github TEXT,
     github_repo TEXT,
-    version TEXT,
     site_name TEXT,
     tagline TEXT,
-    tech_stack TEXT,
-    social_links TEXT,
     contributors TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
@@ -379,13 +284,11 @@ db.serialize(() => {
     if (!row) {
       db.run(
         `INSERT INTO about_page
-           (id, content_html, author_name, version, site_name, tagline, tech_stack, social_links)
-         VALUES (1, '', 'ChuEng', '1.0.0', ?, ?, ?, ?)`,
+           (id, content_html, site_name, tagline)
+         VALUES (1, '', ?, ?)`,
         [
           'OpenStore',
           '鸿蒙应用数据探索与分析平台',
-          JSON.stringify(DEFAULT_TECH_STACK),
-          JSON.stringify(DEFAULT_SOCIAL_LINKS),
         ]
       );
     }
@@ -530,35 +433,15 @@ db.serialize(() => {
   ensureColumn('apps', 'download_count_str', 'TEXT');
   ensureColumn('apps', 'original_id', 'TEXT');
   ensureColumn('about_page', 'github_repo', 'TEXT');
-  ensureColumn('about_page', 'author_avatar', 'TEXT');
   // 事故 / 维护 / 提示 卡片的图标（存图标名，前台按名字取 SVG；留空则按类型取默认图标）
   ensureColumn('incidents', 'icon', 'TEXT');
-  ensureColumn('about_page', 'author_github', 'TEXT');
   ensureColumn('about_page', 'content_markdown', 'TEXT');
-  // 关于页面 Hero 与可配置内容：站点名、一句话简介、技术栈 / 社交链接（JSON 字符串）
+  // 关于页面 Hero 与可配置内容：站点名、一句话简介、鸣谢名单（JSON 字符串）
   ensureColumn('about_page', 'site_name', 'TEXT');
   ensureColumn('about_page', 'tagline', 'TEXT');
   // Hero 背景那个「绿色贡献格」要拼的文字；留空 = 用原来的随机格子
   ensureColumn('about_page', 'hero_grid_text', 'TEXT');
-  ensureColumn('about_page', 'tech_stack', 'TEXT');
-  ensureColumn('about_page', 'social_links', 'TEXT');
   ensureColumn('about_page', 'contributors', 'TEXT');
-  ensureColumn('blogs', 'content_markdown', 'TEXT');
-  ensureColumn('blogs', 'summary', 'TEXT');
-  ensureColumn('blogs', 'cover_url', 'TEXT');
-  ensureColumn('blogs', 'cover_focus', 'TEXT');
-  ensureColumn('blogs', 'author_names', 'TEXT');
-  ensureColumn('blogs', 'seo_title', 'TEXT');
-  ensureColumn('blogs', 'seo_description', 'TEXT');
-  ensureColumn('blogs', 'seo_keywords', 'TEXT');
-  ensureColumn('blogs', 'password', 'TEXT');
-  // 文章密码改成存哈希：password 列保留只为兼容旧数据，读到旧明文时会在校验通过后自动升级成哈希
-  ensureColumn('blogs', 'password_hash', 'TEXT');
-  ensureColumn('blogs', 'allow_comments', 'INTEGER DEFAULT 1');
-  ensureColumn('blogs', 'scheduled_at', 'DATETIME');
-  ensureColumn('blogs', 'published_at', 'DATETIME');
-  ensureColumn('blogs', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
-  ensureColumn('blogs', 'views', 'INTEGER DEFAULT 0');
 });
 
 module.exports = db;

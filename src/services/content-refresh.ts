@@ -17,7 +17,6 @@ const CONTENT_EVENTS = new Set([
   'announcements:update',
   'links:update',
   'groups:update',
-  'changelogs:update',
   'incidents:update',
 ]);
 

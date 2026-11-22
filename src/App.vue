@@ -7,7 +7,7 @@ import { useRouter, useRoute } from 'vue-router';
 import RankNavigation from './components/RankNavigation.vue';
 import BrandMark from './components/BrandMark.vue';
 import { goBackOrHome } from './utils/route-scroll';
-import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, Edit, InfoFilled, Document } from '@element-plus/icons-vue';
+import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
 import { useAuthStore } from './stores/auth';
 import { applyPageMeta, pageShareMeta } from './utils/page-share';
 
@@ -120,8 +120,6 @@ watch(isDockHovered, (hovered) => {
 });
 
 const subDockItems = [
-  { path: '/submit', label: '投稿', icon: Edit },
-  { path: '/articles', label: '文章', icon: Document },
   { path: '/about', label: '关于', icon: InfoFilled },
 ];
 
@@ -146,7 +144,7 @@ const isAdminDashboard = computed(() => shellPath.value.startsWith('/admin/dashb
 const isAdminRoute = computed(() => shellPath.value.startsWith('/admin'));
 /** 四个榜单页共用一条页签条（见模板里的 .rank-nav-shell） */
 const isRankRoute = computed(() => shellPath.value.startsWith('/rank'));
-const activeTab = computed(() => (shellPath.value.startsWith('/articles') ? '/articles' : shellPath.value));
+const activeTab = shellPath;
 
 const navItems = [
   { path: '/', label: '探索', icon: Compass },
@@ -293,10 +291,6 @@ const activeIcon = computed(() => {
       return Collection;
     case '/updates':
       return Refresh;
-    case '/submit':
-      return Edit;
-    case '/articles':
-      return Document;
     case '/about':
       return InfoFilled;
     default:
@@ -317,10 +311,10 @@ const toggleMobileMenu = (event?: Event) => {
 watch(
   () => [route.fullPath, route.meta.title, route.query.title],
   () => {
-    // 专题 / 文章详情页正文里已经有标题了，顶栏不再重复显示
-    const isDetailPage = /^\/(topics|articles)\/[^/]+$/.test(route.path);
+    // 专题详情页正文里已经有标题，顶栏不再重复显示
+    const isDetailPage = /^\/topics\/[^/]+$/.test(route.path);
     const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
-    const isRoot = ['/', '/apps', '/updates', '/topics', '/submit', '/articles', '/about'].includes(route.path);
+    const isRoot = ['/', '/apps', '/updates', '/topics', '/about'].includes(route.path);
     /*
      * 榜单页之间可以互相跳（顶部那排页签），这时浏览器历史里前一条就是「上一个榜单」，
      * 直接后退会退回上一个榜单而不是主页 —— 用户明确要求回主页，所以 /rank/* 一律返回首页。
@@ -340,7 +334,7 @@ const goAdminLogin = () => {
 };
 
 /*
-  信息页（应用 / 更新 / 专题 / 文章详情）把「资源图片 + 文字」注册进 pageShareMeta 后，
+  信息页（应用 / 更新 / 专题详情）把「资源图片 + 文字」注册进 pageShareMeta 后，
   立刻刷新 og / twitter 卡片，这样分享出去的链接带的就是当前页面的图和文案。
 */
 watch(pageShareMeta, () => {
@@ -458,7 +452,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           漏掉某个页面时它只是走回原来的「每次重新加载」，不会出错。
         -->
         <keep-alive
-          include="HomeView,AppsView,UpdatesView,TopicView,TotalRankView,GrowthRankView,HistoryRankView,NonHuaweiRankView,CategoryRankView,AppCardView,ArticlesView,AboutView,SubmissionView,SystemStatusView,ArticleDetailView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
+          include="HomeView,AppsView,UpdatesView,TopicView,TotalRankView,GrowthRankView,HistoryRankView,NonHuaweiRankView,CategoryRankView,AppCardView,AboutView,SystemStatusView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
           :max="30"
         >
           <component :is="Component" :key="route.path" />
@@ -476,7 +470,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
     >
       <!--
         次级入口的「传送落点」。
-        叠放模式下 投稿/文章/关于 会传送到这里，成为主胶囊的兄弟节点而不是后代 ——
+        叠放模式下「关于」会传送到这里，成为主胶囊的兄弟节点而不是后代 ——
         因为主胶囊带 backdrop-filter，是一张 backdrop root，
         挂在它里面的元素再写 backdrop-filter 也糊不到页面（背后是空的），
         上面那块就会透出清晰的色块、和下面那块材质对不上。
@@ -498,7 +492,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
         </div>
 
         <!--
-          次级入口（投稿/文章/关于）是同一条胶囊的一部分：
+          次级入口「关于」是同一条胶囊的一部分：
           悬停时胶囊往右变长把它们「拉」出来，主入口一步都不动。
         -->
         <Teleport :to="subPortalRef" :disabled="!isDockStacked || !subPortalRef">

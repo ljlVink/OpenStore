@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/auth';
-import type { Contributor, SocialLinkItem, TechStackItem } from '../utils/about';
+import type { Contributor } from '../utils/about';
 
 const API_URL = '/api/admin';
 
@@ -304,40 +304,15 @@ export const deleteSystemLogs = async (ids: number[], clearAll = false) => {
   await api.post('/logs/batch-delete', { ids, clearAll });
 };
 
-// Changelogs
-import type { Changelog } from './api';
-export const getChangelogs = async () => {
-  const { data } = await api.get('/changelogs');
-  return data.items as Changelog[];
-};
-export const createChangelog = async (payload: Partial<Changelog>) => {
-  const { data } = await api.post('/changelogs', payload);
-  return data.id as number;
-};
-export const updateChangelog = async (id: number, payload: Partial<Changelog>) => {
-  await api.put(`/changelogs/${id}`, payload);
-};
-export const deleteChangelog = async (id: number) => {
-  await api.delete(`/changelogs/${id}`);
-};
-
 export interface AboutPage {
   id: number;
   content_html?: string;
   content_markdown?: string;
-  author_name?: string;
-  author_avatar?: string;
-  author_github?: string;
   github_repo?: string;
-  version?: string;
   site_name?: string;
   tagline?: string;
   /** Hero 背景的绿色格子拼出的文字；留空 = 原来的随机格子 */
   hero_grid_text?: string | null;
-  /** 技术栈标签（服务端已解析成数组） */
-  tech_stack?: TechStackItem[];
-  /** 作者联系我们（服务端已解析成数组） */
-  social_links?: SocialLinkItem[];
   /** 鸣谢名单（服务端已解析成数组） */
   contributors?: Contributor[];
   updated_at?: string;
@@ -579,59 +554,6 @@ export const getPublicSiteCards = async (page?: string, options?: { includeDisab
   return data.items as SiteCard[];
 };
 
-export interface Comment {
-  id: number;
-  blog_id: number;
-  parent_id: number | null;
-  nickname: string;
-  email: string | null;
-  website: string | null;
-  content: string;
-  status: 'pending' | 'approved' | 'spam' | 'trash';
-  ip_address: string | null;
-  user_agent: string | null;
-  created_at: string;
-  updated_at: string;
-  blog_title?: string;
-}
-
-export interface CommentQuery {
-  status?: string;
-  blog_id?: number;
-}
-
-export const getComments = async (page = 1, pageSize = 20, query: CommentQuery = {}) => {
-  const params: Record<string, any> = { page, pageSize };
-  if (query.status) params.status = query.status;
-  if (query.blog_id) params.blog_id = query.blog_id;
-  const { data } = await api.get('/comments', { params });
-  return data as { items: Comment[]; total: number; page: number; pageSize: number };
-};
-
-export const updateComment = async (id: number, data: { status?: string; content?: string; nickname?: string; email?: string | null; website?: string }) => {
-  await api.put(`/comments/${id}`, data);
-};
-
-export const deleteComment = async (id: number) => {
-  const { data } = await api.delete(`/comments/${id}`);
-  return data as { success: boolean; deleted: number };
-};
-
-export const deleteComments = async (ids: number[]) => {
-  const { data } = await api.post('/comments/batch-delete', { ids });
-  return data as { success: boolean; deleted: number };
-};
-
-export const updateCommentsStatus = async (ids: number[], status: string) => {
-  const { data } = await api.post('/comments/batch-status', { ids, status });
-  return data as { success: boolean; updated: number };
-};
-
-export const getCommentBlogs = async () => {
-  const { data } = await api.get('/comments/blogs');
-  return data.items as { id: number; title: string }[];
-};
-
 // System Settings
 export const getSystemSettings = async () => {
   const { data } = await api.get('/settings');
@@ -650,8 +572,6 @@ export interface AdminOverviewStats {
   /** 覆盖地区数（同上） */
   locationKinds: number;
   appCount: number;
-  commentCount: number;
-  articleCount: number;
   systemUptime: number;
   nodeVersion?: string;
 }

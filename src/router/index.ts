@@ -16,10 +16,7 @@ const AppsView = () => import('../views/AppsView.vue');
 const UpdatesView = () => import('../views/UpdatesView.vue');
 const UpdatesAppDetailView = () => import('../views/UpdatesAppDetailView.vue');
 const TopicView = () => import('../views/TopicView.vue');
-const ArticlesView = () => import('../views/ArticlesView.vue');
-const ArticleDetailView = () => import('../views/ArticleDetailView.vue');
 const AdminDashboardView = () => import('../views/admin/AdminDashboardView.vue');
-const SubmissionView = () => import('../views/SubmissionView.vue');
 const AboutView = () => import('../views/AboutView.vue');
 import { useAuthStore } from '../stores/auth';
 import { trackVisit } from '../services/api';
@@ -129,28 +126,10 @@ const router = createRouter({
       meta: { title: '分类榜', description: '按应用分类查看下载量增长，找出正在上涨的赛道。' }
     },
     {
-      path: '/articles',
-      name: 'articles',
-      component: ArticlesView,
-      meta: { title: '文章', description: '阅读OpenStore发布的最新文章与专题内容。' }
-    },
-    {
-      path: '/articles/:slug',
-      name: 'article-detail',
-      component: ArticleDetailView,
-      meta: { title: '文章详情', description: '查看文章详细内容。' }
-    },
-    {
-      path: '/submit',
-      name: 'submission',
-      component: SubmissionView,
-      meta: { title: '投稿', description: '提交鸿蒙应用或专题链接以请求上游收录。' }
-    },
-    {
       path: '/about',
       name: 'about',
       component: AboutView,
-      meta: { title: '关于', description: '了解OpenStore的开发背景、技术栈和团队信息。' }
+      meta: { title: '关于', description: '了解 OpenStore 的开发背景和团队信息。' }
     },
     {
       path: '/login',
@@ -221,7 +200,7 @@ router.beforeEach((to) => {
 router.afterEach((to) => {
   /*
     标题 / 描述 / og / twitter 统一由 page-share 决定：
-    栏目页（探索、应用、专题、榜单…）带网站 logo，信息页（应用、文章、专题详情）
+    栏目页（探索、应用、专题、榜单…）带网站 logo，信息页（应用、专题详情）
     带自己的资源图片和文字。
   */
   applyPageMeta({

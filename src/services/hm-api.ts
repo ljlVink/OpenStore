@@ -216,32 +216,3 @@ export const hmApi = new HmApiClient({
   // 备用直连，默认关闭（不配则候选线路只有 /api/v0）；填了会构建进 JS 包，不是秘密
   fallbackUrl: import.meta.env.VITE_API_FALLBACK
 });
-
-export interface SubmissionComment {
-  platform: string;
-  user: string;
-}
-
-export interface AppSubmissionData {
-  app_id?: string;
-  pkg_name?: string;
-  link?: string;
-}
-
-export const submitApp = async (data: AppSubmissionData) => {
-  return hmApi.post('/submit', { 
-    app_id: data.app_id,
-    pkg_name: data.pkg_name,
-    link: data.link,
-    comment: {
-      platform: 'BetaHub',
-      user: 'Guest'
-    }
-  });
-};
-
-export const submitSubstance = async (substanceId: string, comment?: SubmissionComment) => {
-  return hmApi.post(`/submit_substance/${substanceId}`, {
-    comment: comment || { platform: 'OpenStore', user: 'Guest' }
-  });
-};

@@ -3,7 +3,6 @@ const cors = require('cors');
 const geoip = require('geoip-lite');
 const UAParser = require('ua-parser-js');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -43,7 +42,6 @@ const {
   SITE_DEFAULT_DESCRIPTION,
   PAGE_SHARE_META,
   CRAWLER_UA_RE,
-  absoluteSiteAsset,
   fetchTopicShareCard,
   fetchAppShareCard,
   readShareShell,
@@ -58,7 +56,7 @@ const { uploadsDir, UPLOAD_FORCE_DOWNLOAD_EXT } = require('./lib/uploads.cjs');
 const seoSubmit = require('./lib/seo-submit.cjs');
 const { getSitemap, invalidateSitemapCache } = require('./lib/sitemap.cjs');
 const { canonicalPathFor } = require('./lib/canonical.cjs');
-const { applyJsonLdToHtml, buildAppJsonLd, buildArticleJsonLd } = require('./lib/json-ld.cjs');
+const { applyJsonLdToHtml, buildAppJsonLd } = require('./lib/json-ld.cjs');
 
 /** 体检要枚举的就是「当前这个 app」上已注册的路由 */
 const collectPerfCheckRoutes = () => collectPerfCheckRoutesIn(app);
@@ -179,7 +177,7 @@ const findKnownLocation = (ip) =>
 
 // Ensure /uploads is served correctly before SPA fallback
 /*
- * /uploads 必须保持匿名可读（文章封面、应用图标这些要公开展示），
+ * /uploads 必须保持匿名可读（公开内容中的图片等需要正常展示），
  * 但加了三点硬化，避免上传的文件在你的域名下被当成页面执行：
  *   1. nosniff：不让浏览器猜类型；
  *   2. html/svg/xml/js 这类能执行脚本的扩展名一律强制下载，不作为页面打开；
@@ -197,127 +195,6 @@ app.use(
   express.static(uploadsDir, { index: false, dotfiles: 'ignore' })
 );
 
-// SEO：文章页的服务端 meta 注入，必须排在静态资源之前
-app.get('/articles/:slug', (req, res, next) => {
-  if (req.headers.accept && !req.headers.accept.includes('text/html')) {
-    return next();
-  }
-
-  const slug = req.params.slug;
-  const indexPath = path.join(__dirname, '../dist/index.html');
-
-  if (!fs.existsSync(indexPath)) return next();
-
-  const serveDefault = () => next();
-
-  if (!slug) return serveDefault();
-
-  db.get(
-    'SELECT title, summary, cover_url, seo_description, seo_keywords, author_names, created_at, updated_at, published_at FROM blogs WHERE slug = ?',
-    [slug],
-    (err, row) => {
-    if (err || !row) return serveDefault();
-
-    fs.readFile(indexPath, 'utf8', (err, html) => {
-      if (err) return serveDefault();
-
-      // 卡片标题用文章名本身，标签页标题保持「OpenStore | 文章名」
-      const title = row.title;
-      const docTitle = `${SITE_NAME} | ${row.title}`;
-      const description = (row.seo_description || row.summary || '查看文章详细内容').replace(/"/g, '&quot;');
-      const defaultKeywords = 'OpenStore,华为应用市场看板,鸿蒙应用看板,鸿蒙应用数据面板,鸿蒙,应用商店,应用下载,榜单,更新,应用分发';
-      
-      let keywords = row.seo_keywords ? row.seo_keywords : row.title;
-      if (keywords) {
-        keywords = `${keywords},${defaultKeywords}`;
-      } else {
-        keywords = defaultKeywords;
-      }
-      keywords = keywords.replace(/"/g, '&quot;');
-      
-      // 抓取器只认绝对图片地址：站内相对封面补成绝对，没封面就退回网站 logo
-      const image = absoluteSiteAsset(row.cover_url) || SITE_LOGO_URL;
-
-      let modifiedHtml = html;
-      
-      if (modifiedHtml.includes('<title>')) {
-        modifiedHtml = modifiedHtml.replace(/<title>.*?<\/title>/, `<title>${docTitle}</title>`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<title>${docTitle}</title>\n</head>`);
-      }
-
-      // 不用 dotAll 的 /s 标志（部分 Node 版本不支持），改用 [\s\S]*? 跨行匹配
-      if (modifiedHtml.includes('name="description"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+name="description"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="description" content="${description}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta name="description" content="${description}" />\n</head>`);
-      }
-      
-      if (modifiedHtml.includes('name="keywords"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+name="keywords"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="keywords" content="${keywords}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta name="keywords" content="${keywords}" />\n</head>`);
-      }
-
-      if (modifiedHtml.includes('property="og:title"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+property="og:title"\s+content="[\s\S]*?"\s*\/?>/i, `<meta property="og:title" content="${title}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta property="og:title" content="${title}" />\n</head>`);
-      }
-
-      if (modifiedHtml.includes('property="og:description"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+property="og:description"\s+content="[\s\S]*?"\s*\/?>/i, `<meta property="og:description" content="${description}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta property="og:description" content="${description}" />\n</head>`);
-      }
-
-      if (image) {
-        if (modifiedHtml.includes('property="og:image"')) {
-          modifiedHtml = modifiedHtml.replace(/<meta\s+property="og:image"\s+content="[\s\S]*?"\s*\/?>/i, `<meta property="og:image" content="${image}" />`);
-        } else {
-          modifiedHtml = modifiedHtml.replace('</head>', `<meta property="og:image" content="${image}" />\n</head>`);
-        }
-        
-        if (modifiedHtml.includes('name="twitter:image"')) {
-          modifiedHtml = modifiedHtml.replace(/<meta\s+name="twitter:image"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="twitter:image" content="${image}" />`);
-        } else {
-          modifiedHtml = modifiedHtml.replace('</head>', `<meta name="twitter:image" content="${image}" />\n</head>`);
-        }
-      }
-
-      if (!modifiedHtml.includes('name="twitter:card"')) {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta name="twitter:card" content="summary_large_image" />\n</head>`);
-      }
-      
-      if (modifiedHtml.includes('name="twitter:title"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+name="twitter:title"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="twitter:title" content="${title}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta name="twitter:title" content="${title}" />\n</head>`);
-      }
-      
-      if (modifiedHtml.includes('name="twitter:description"')) {
-        modifiedHtml = modifiedHtml.replace(/<meta\s+name="twitter:description"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="twitter:description" content="${description}" />`);
-      } else {
-        modifiedHtml = modifiedHtml.replace('</head>', `<meta name="twitter:description" content="${description}" />\n</head>`);
-      }
-
-      // 结构化数据 + canonical（文章页此前两者都缺）
-      const articleUrl = `${SITE_ORIGIN}/articles/${encodeURIComponent(slug)}`;
-      const articleJsonLd = buildArticleJsonLd(row, {
-        url: articleUrl,
-        name: row.title,
-        description: row.seo_description || row.summary,
-        image,
-        siteName: SITE_NAME
-      });
-      modifiedHtml = applyCanonicalToHtml(modifiedHtml, articleUrl);
-      modifiedHtml = applyJsonLdToHtml(modifiedHtml, articleJsonLd);
-
-      res.send(modifiedHtml);
-    });
-  });
-});
-
 /** IndexNow key 文件：内容为 key 本身，搜索引擎据此验证站点归属。须排在 express.static 之前 */
 app.get('/indexnow-key.txt', async (req, res) => {
   try {
@@ -329,7 +206,7 @@ app.get('/indexnow-key.txt', async (req, res) => {
   }
 });
 
-/** 动态 sitemap.xml：含应用与文章详情页，须排在 express.static 之前以覆盖构建期文件。生成失败时回退静态文件 */
+/** 动态 sitemap.xml：含应用详情页，须排在 express.static 之前以覆盖构建期文件。生成失败时回退静态文件 */
 app.get('/sitemap.xml', async (req, res, next) => {
   try {
     const config = await seoSubmit.loadConfig();
@@ -515,7 +392,7 @@ app.use((req, res, next) => {
            * 真正的去重在这里：把「检查 + 插入」写成一条 SQL。
            *
            * 不能只靠上面那次 SELECT —— 首页会同时并发好几个公开接口请求
-           * （monitors / incidents / comments / site-cards / overview ...），
+           * （monitors / incidents / site-cards / overview ...），
            * 它们带着同一个 Referer，去重路径都是 `/`。先查后插时这些请求会
            * 一起通过检查、各插一行，线上出现过「访问一次却记 6~7 条」，
            * 而且时间戳一模一样。条件插入由 SQLite 串行执行，不存在这个竞态。
@@ -615,10 +492,8 @@ mountRouter('database', require('./routes/database.cjs'));    // 数据库管理
 mountRouter('friend-links', require('./routes/friend-links.cjs')); // 友情链接
 mountRouter('group-chats', require('./routes/group-chats.cjs'));   // 群聊
 mountRouter('incidents', require('./routes/incidents.cjs'));  // 服务事故 / 维护公告
-mountRouter('comments', require('./routes/comments.cjs'));    // 评论
-mountRouter('public-content', require('./routes/public-content.cjs')); // 前台公开内容：应用 / 公告 / 文章
+mountRouter('public-content', require('./routes/public-content.cjs')); // 前台公开内容：应用与公告
 mountRouter('content-admin', require('./routes/content-admin.cjs'));   // 公告与公告分类
-mountRouter('changelogs', require('./routes/changelogs.cjs'));     // 更新日志
 mountRouter('diagnostics', require('./routes/diagnostics.cjs'));   // 客户端 IP 诊断
 mountRouter('site', require('./routes/site.cjs'));           // 站点卡片 / 关于页
 mountRouter('env-logs', require('./routes/env-logs.cjs'));    // 环境变量 / 操作日志

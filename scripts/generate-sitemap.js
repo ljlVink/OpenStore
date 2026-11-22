@@ -1,7 +1,7 @@
 /*
  * 生成构建期的 dist/sitemap.xml 兜底文件。
  *
- * 完整 sitemap（含应用与文章详情页）由服务端运行时输出：GET /sitemap.xml → server/lib/sitemap.cjs。
+ * 完整 sitemap（含应用详情页）由服务端运行时输出：GET /sitemap.xml → server/lib/sitemap.cjs。
  * 这里只在 dist 被纯静态托管、请求到不了 Node 时兜底，故只列栏目页。
  * 清单需与 server/lib/sitemap.cjs 的 STATIC_ROUTES 保持一致。
  */
@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BASE_URL = String(process.env.SITE_ORIGIN || 'https://next.betahub.tech').replace(/\/+$/, '');
-const ROUTES = ['/', '/apps', '/updates', '/topics', '/articles', '/about'];
+const ROUTES = ['/', '/apps', '/updates', '/topics', '/about'];
 
 const distDir = path.resolve(__dirname, '../dist');
 const outputPath = path.join(distDir, 'sitemap.xml');

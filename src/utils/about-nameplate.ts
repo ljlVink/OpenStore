@@ -5,7 +5,7 @@
  *
  * 为什么是手绘 Canvas 而不是 html2canvas / dom-to-image：
  *   项目里没有这类依赖，为了导出一张卡片去装一个几百 KB 的库不划算；
- *   卡片本身结构很简单（圆角底 + 渐变 + 贡献图纹理 + logo + 两行文字 + 几个胶囊），
+ *   卡片本身结构很简单（圆角底 + 渐变 + 贡献图纹理 + logo + 两行文字），
  *   用 Canvas 2D 直接画反而更可控、也不会把页面的样式依赖带进来。
  *
  * 纹理复刻的是 Hero 卡的实现：底纹和绿格都按格子坐标画，再用 destination-in
@@ -18,9 +18,6 @@ import { GREEN_COLOR, greenCellOpacity } from './hero-grid';
 export interface NameplateData {
   siteName?: string;
   tagline?: string;
-  version?: string;
-  authorName?: string;
-  repoName?: string;
 }
 
 export type NameplateTheme = 'light' | 'dark';
@@ -38,7 +35,7 @@ const SCALE = 2;
 
 const THEMES: Record<NameplateTheme, {
   bgTop: string; bgBottom: string; fg: string; sub: string;
-  ink: string; chipBorder: string; logo: HTMLImageElement | null;
+  ink: string; logo: HTMLImageElement | null;
 }> = {
   light: {
     bgTop: '#ffffff',
@@ -46,7 +43,6 @@ const THEMES: Record<NameplateTheme, {
     fg: '#0f172a',
     sub: '#64748b',
     ink: '#0f172a',
-    chipBorder: 'rgba(100, 116, 139, 0.35)',
     logo: null,
   },
   dark: {
@@ -55,7 +51,6 @@ const THEMES: Record<NameplateTheme, {
     fg: '#e2e8f0',
     sub: '#94a3b8',
     ink: '#f1f5f9',
-    chipBorder: 'rgba(148, 163, 184, 0.35)',
     logo: null,
   },
 };
@@ -169,30 +164,6 @@ const buildTexture = async (s: number, ink: string) => {
   return tex;
 };
 
-/** 画一个胶囊，返回它的宽度 */
-const drawChip = (
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  x: number,
-  y: number,
-  h: number,
-  border: string,
-  color: string
-) => {
-  ctx.font = `500 12px ${FONT_STACK}`;
-  const padding = 10;
-  const w = ctx.measureText(label).width + padding * 2;
-  roundRectPath(ctx, x, y, w, h, h / 2);
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, x + padding, y + h / 2 + 0.5);
-  return w;
-};
-
 /* ------------------------------------------------------------------ 主流程 */
 
 /** 把当前表单数据画成一张名牌卡片，返回 canvas */
@@ -247,31 +218,13 @@ export const renderNameplate = async (
   ctx.drawImage(logo, LOGO_X, LOGO_Y, LOGO, LOGO);
 
   const displayName = (data.siteName || '').trim() || 'OpenStore';
-  const accent = theme === 'dark' ? '#60a5fa' : '#2563eb';
 
-  // 站名 + 版本胶囊
+  // 站点名称
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = tone.fg;
   ctx.font = `700 26px ${FONT_STACK}`;
   ctx.fillText(displayName, TEXT_X, 72);
-  let cursor = TEXT_X + ctx.measureText(displayName).width;
-
-  const version = (data.version || '').trim().replace(/^v/i, '');
-  if (version) {
-    cursor += 12;
-    const label = `v${version}`;
-    ctx.font = `600 12px ${FONT_STACK}`;
-    const w = ctx.measureText(label).width + 20;
-    roundRectPath(ctx, cursor, 60, w, 24, 12);
-    ctx.fillStyle = theme === 'dark' ? 'rgba(96,165,250,0.14)' : 'rgba(37,99,235,0.10)';
-    ctx.fill();
-    ctx.fillStyle = accent;
-    ctx.textAlign = 'center';
-    ctx.fillText(label, cursor + w / 2, 72.5);
-    ctx.textAlign = 'left';
-    cursor += w;
-  }
 
   // 一句话简介
   const tagline = (data.tagline || '').trim();
@@ -280,15 +233,6 @@ export const renderNameplate = async (
     ctx.font = `400 14px ${FONT_STACK}`;
     ctx.fillText(tagline, TEXT_X, 106);
   }
-
-  // 胶囊行：仓库 / 作者
-  let chipX = TEXT_X;
-  const chips: string[] = [];
-  if ((data.repoName || '').trim()) chips.push(data.repoName!.trim());
-  if ((data.authorName || '').trim()) chips.push(data.authorName!.trim());
-  chips.forEach((label) => {
-    chipX += drawChip(ctx, label, chipX, 126, 26, tone.chipBorder, tone.sub) + 10;
-  });
 
   ctx.restore();
 

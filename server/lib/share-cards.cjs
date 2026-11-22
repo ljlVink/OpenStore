@@ -4,7 +4,6 @@
  * 规则：
  *   - 栏目页（探索 / 应用 / 专题 / 更新 / 榜单 / 关于…）：带网站 logo + 该栏目自己的标题、描述
  *   - 信息页（应用详情、更新详情、应用面板、专题详情）：带当前页面的资源图片（应用图标 / 专题首图）与文字
- *   - 文章详情：走 index.cjs 的 /articles/:slug（数据库里已有封面与 SEO 文案）
  * 栏目页只做字符串替换；信息页只有抓取器才会去查上游（30 分钟内存缓存 + 5s 超时），
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
@@ -18,7 +17,6 @@ const { UPSTREAM_USER_AGENT } = require('./config.cjs');
  * 规则：
  *   - 栏目页（探索 / 应用 / 专题 / 更新 / 榜单 / 关于…）：带网站 logo + 该栏目自己的标题、描述
  *   - 信息页（应用详情、更新详情、应用面板、专题详情）：带当前页面的资源图片（应用图标 / 专题首图）与文字
- *   - 文章详情：走上面的 /articles/:slug（数据库里已有封面与 SEO 文案）
  * 栏目页只做字符串替换；信息页只有抓取器才会去查上游（30 分钟内存缓存 + 5s 超时），
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
@@ -40,15 +38,13 @@ const PAGE_SHARE_META = {
   '/apps': { title: '应用', description: '浏览 OpenStore 全部应用，查找你需要的工具和游戏。' },
   '/updates': { title: '今日上新', description: '获取最新应用更新和新上架应用信息。' },
   '/topics': { title: '专题', description: '跟随专题逛鸿蒙生态，发现值得一试的应用。' },
-  '/articles': { title: '文章', description: '阅读 OpenStore 发布的最新文章与专题内容。' },
   '/rank/total': { title: '总下载榜', description: '查看 OpenStore 应用总榜，了解最受欢迎的应用。' },
   '/rank/growth': { title: '飙升榜', description: '查看 OpenStore 应用飙升榜，发现潜力应用。' },
   '/rank/history': { title: '历史榜', description: '回顾应用历史排名，分析长期表现。' },
   '/rank/non-huawei': { title: '非华为榜', description: '探索非华为设备上的热门应用。' },
   '/app-cards': { title: '应用列表', description: '应用卡片列表。' },
   '/system-status': { title: '系统状态', description: '监控系统核心服务与接口状态。' },
-  '/submit': { title: '投稿', description: '提交鸿蒙应用或专题链接以请求上游收录。' },
-  '/about': { title: '关于', description: '了解 OpenStore 的开发背景、技术栈和团队信息。' }
+  '/about': { title: '关于', description: '了解 OpenStore 的开发背景和团队信息。' }
 };
 
 /** 抓取器（含微信 / QQ / 微博等国内平台的预览抓取） */
@@ -280,4 +276,4 @@ const applyCanonicalToHtml = (html, url) => {
   return html.replace('</head>', `${tag}\n</head>`);
 };
 
-module.exports = { SITE_ORIGIN, SITE_LOGO_URL, SITE_NAME, SITE_DEFAULT_DESCRIPTION, PAGE_SHARE_META, CRAWLER_UA_RE, absoluteSiteAsset, fetchTopicShareCard, fetchAppShareCard, readShareShell, applyShareCardToHtml, applyCanonicalToHtml };
+module.exports = { SITE_ORIGIN, SITE_LOGO_URL, SITE_NAME, SITE_DEFAULT_DESCRIPTION, PAGE_SHARE_META, CRAWLER_UA_RE, fetchTopicShareCard, fetchAppShareCard, readShareShell, applyShareCardToHtml, applyCanonicalToHtml };

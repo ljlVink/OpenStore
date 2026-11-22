@@ -12,7 +12,7 @@ function readToken(): string {
 
 /**
  * 建立后台实时连接。
- * /ws 推送的是访客日志、操作日志、投稿等后台数据，所以未登录时不应建立连接，
+ * /ws 推送访客日志、操作日志等后台数据，所以未登录时不应建立连接，
  * 服务端也会在握手阶段校验 token。
  */
 export function connectWS() {

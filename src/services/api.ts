@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { translateAppsListCall } from './upstream-compat';
-import type { Contributor, SocialLinkItem, TechStackItem } from '../utils/about';
+import type { Contributor } from '../utils/about';
 
 // Use same-origin relative base URL; Nginx/BT 反向代理到后端
 const API_URL = '/api';
@@ -387,89 +387,6 @@ export const offlineAnnouncement = async (id: number): Promise<void> => {
   await apiClient.post(`/announcements/${id}/offline`);
 };
 
-export interface Blog {
-  id: number;
-  title: string;
-  slug: string;
-  content_html?: string;
-  content_markdown?: string;
-  summary?: string | null;
-  cover_url?: string | null;
-  cover_focus?: string | null;
-  author_names?: string | null;
-  status: 'draft' | 'published' | 'offline';
-  category_id?: number | null;
-  category_name?: string | null;
-  seo_title?: string | null;
-  seo_description?: string | null;
-  seo_keywords?: string | null;
-  published_at?: string | null;
-  updated_at?: string | null;
-  tag_ids?: string | number[] | null;
-  tag_names?: string | null;
-  tag_colors?: string | null;
-  has_password?: number | null;
-  allow_comments?: number | null;
-  app_ids?: string | number[] | null;
-  apps?: AppItem[];
-  views?: number;
-}
-export interface BlogCategory {
-  id: number;
-  name: string;
-  parent_id?: number | null;
-}
-export interface BlogTag {
-  id: number;
-  name: string;
-  color?: string | null;
-  group_name?: string | null;
-  usage_count?: number;
-}
-export const getPublicBlogCategories = async (): Promise<BlogCategory[]> => {
-  const response = await apiClient.get('/public/blog-categories');
-  return response.data.items || [];
-};
-export const getPublicBlogTags = async (): Promise<BlogTag[]> => {
-  const response = await apiClient.get('/public/blog-tags');
-  return response.data.items || [];
-};
-export const getPublicBlogs = async (params: { limit?: number; category_id?: number; tag_id?: number } = {}): Promise<Blog[]> => {
-  const response = await apiClient.get('/public/blogs', { params });
-  return response.data.items || [];
-};
-export const getPublicBlogBySlug = async (slug: string, password?: string): Promise<Blog> => {
-  const response = await apiClient.get(`/public/blogs/${slug}`, { params: password ? { password } : {} });
-  return response.data;
-};
-
-// Changelogs
-export interface Changelog {
-  id: number;
-  version: string;
-  content_html?: string;
-  content_markdown?: string;
-  release_date: string;
-  created_at: string;
-}
-export const getChangelogs = async (): Promise<Changelog[]> => {
-  const response = await apiClient.get('/changelogs');
-  return response.data.items || [];
-};
-export const getPublicChangelogs = async (): Promise<Changelog[]> => {
-  const response = await apiClient.get('/public/changelogs');
-  return response.data.items || [];
-};
-export const createChangelog = async (data: Partial<Changelog>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/changelogs', data);
-  return response.data;
-};
-export const updateChangelog = async (id: number, data: Partial<Changelog>): Promise<void> => {
-  await apiClient.put(`/changelogs/${id}`, data);
-};
-export const deleteChangelog = async (id: number): Promise<void> => {
-  await apiClient.delete(`/changelogs/${id}`);
-};
 
 // Apps
 export interface AppItem {
@@ -511,21 +428,13 @@ export interface AboutPage {
   id: number;
   content_html?: string;
   content_markdown?: string;
-  author_name?: string;
-  author_avatar?: string;
-  author_github?: string;
   github_repo?: string;
-  version?: string;
   /** Hero 上的站点名 */
   site_name?: string;
   /** Hero 上的一句话简介 */
   tagline?: string;
   /** Hero 背景的绿色格子拼出的文字；留空 = 原来的随机格子 */
   hero_grid_text?: string | null;
-  /** 技术栈标签，服务端已从 JSON 文本解析成数组 */
-  tech_stack?: TechStackItem[];
-  /** 作者的联系我们，服务端已从 JSON 文本解析成数组 */
-  social_links?: SocialLinkItem[];
   /** 鸣谢名单，服务端已从 JSON 文本解析成数组 */
   contributors?: Contributor[];
 }

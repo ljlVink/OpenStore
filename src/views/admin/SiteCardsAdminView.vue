@@ -172,8 +172,6 @@ const EXTRA_PAGES = [
   { key: 'apps', label: '应用', manageable: false },
   { key: 'topics', label: '专题', manageable: false },
   { key: 'updates', label: '更新', manageable: false },
-  { key: 'submit', label: '投稿', manageable: false },
-  { key: 'articles', label: '文章', manageable: false },
 ];
 
 const dockPages = [...PAGES, ...EXTRA_PAGES.map((page) => ({ ...page, hint: '' }))];

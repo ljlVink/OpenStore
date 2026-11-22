@@ -39,18 +39,9 @@
           </template>
 
           <el-form label-position="top" :model="form">
-            <el-row :gutter="20">
-              <el-col :md="12" :xs="24">
-                <el-form-item label="站点名称">
-                  <el-input v-model="form.site_name" placeholder="显示在页面头部的大标题" maxlength="40" show-word-limit />
-                </el-form-item>
-              </el-col>
-              <el-col :md="12" :xs="24">
-                <el-form-item label="版本号">
-                  <el-input v-model="form.version" placeholder="e.g. 1.0.0" />
-                </el-form-item>
-              </el-col>
-            </el-row>
+            <el-form-item label="站点名称">
+              <el-input v-model="form.site_name" placeholder="显示在页面头部的大标题" maxlength="40" show-word-limit />
+            </el-form-item>
 
             <el-form-item label="一句话简介">
               <el-input v-model="form.tagline" placeholder="页面头部标题下面的一句话" maxlength="80" show-word-limit />
@@ -68,66 +59,13 @@
           </el-form>
 
           <p class="section-tip">
-            星标 / 仓库 / 作者是自动项，删掉就不显示；背景绿格文字用英文/数字最清楚，留空即恢复原来的滚动随机格子。
-            卡片底部那排胶囊在下面的「联系我们」卡片里配置（名称留空就只显示图标）。
+            背景绿格文字用英文/数字最清楚，留空即恢复原来的滚动随机格子。
           </p>
         </AdminSection>
 
-        <!-- 联系我们：前台「页面头部」卡片底部那排胶囊 -->
         <AdminSection title="联系我们" head-wrap>
-          <template #meta>
-            <span class="meta-chip">对应前台「页面头部」底部的胶囊</span>
-            <span class="meta-chip">{{ socialLinkItems.length }} 个</span>
-          </template>
-          <template #actions>
-            <div class="head-right">
-              <el-button size="small" :icon="MagicStick" @click="restoreSocialLinks">恢复默认</el-button>
-              <el-dropdown trigger="click" @command="addSocialItem">
-                <el-button size="small" type="primary" plain :icon="Plus">添加</el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="custom">自定义链接</el-dropdown-item>
-                    <el-dropdown-item
-                      v-for="(opt, i) in SOCIAL_AUTO_OPTIONS"
-                      :key="opt.value"
-                      :command="opt.value"
-                      :divided="i === 0"
-                    >
-                      {{ opt.label }}（{{ opt.hint }}）
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </template>
-
-          <div v-if="socialLinkItems.length" class="item-list">
-            <div v-for="(item, index) in socialLinkItems" :key="index" class="item-row is-social">
-              <el-input v-model="item.label" placeholder="名称（留空只显示图标）" class="item-label" />
-              <el-input v-if="!item.auto" v-model="item.url" placeholder="https://..." class="item-grow" />
-              <span v-else class="item-grow auto-source">{{ autoOption(item)?.hint }}</span>
-              <el-select v-model="item.icon" class="item-icon">
-                <el-option v-for="opt in SOCIAL_ICON_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value">
-                  <span class="icon-option">
-                    <AboutSocialIcon :name="opt.value" />
-                    {{ opt.label }}
-                  </span>
-                </el-option>
-              </el-select>
-              <div class="item-actions">
-                <el-button :icon="ArrowUp" text size="small" :disabled="index === 0" @click="moveSocialLink(index, -1)" />
-                <el-button
-                  :icon="ArrowDown"
-                  text
-                  size="small"
-                  :disabled="index === socialLinkItems.length - 1"
-                  @click="moveSocialLink(index, 1)"
-                />
-                <el-button :icon="Delete" text type="danger" size="small" @click="socialLinkItems.splice(index, 1)" />
-              </div>
-            </div>
-          </div>
-          <p v-else class="empty-tip">还没有联系我们，点「添加」或「恢复默认」开始。</p>
+          <AboutSocialLinks />
+          <p class="section-tip">公开页面与预览统一使用此 Telegram 联系入口，不受历史链接配置影响。</p>
         </AdminSection>
 
         <!-- 页面内容 -->
@@ -180,73 +118,6 @@
           </div>
         </AdminSection>
 
-        <!-- 关于作者 -->
-        <AdminSection title="关于作者" head-wrap>
-          <template #meta>
-            <span class="meta-chip">对应前台「关于作者」卡片</span>
-          </template>
-
-          <el-form label-position="top" :model="form">
-            <el-row :gutter="20">
-              <el-col :md="12" :xs="24">
-                <el-form-item label="作者名称">
-                  <el-input v-model="form.author_name" placeholder="Author Name" />
-                </el-form-item>
-              </el-col>
-              <el-col :md="12" :xs="24">
-                <el-form-item label="GitHub 主页">
-                  <el-input v-model="form.author_github" placeholder="https://github.com/..." />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="20">
-              <el-col :md="12" :xs="24">
-                <el-form-item label="仓库路径">
-                  <el-input v-model="form.github_repo" placeholder="owner/repo（也接受完整 GitHub 链接）" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-          </el-form>
-          <p class="section-tip">「星标」数量按仓库地址自动从 GitHub 获取，无需手动填写。</p>
-        </AdminSection>
-
-        <!-- 技术栈 -->
-        <AdminSection title="技术栈" head-wrap>
-          <template #meta>
-            <span class="meta-chip">对应前台「技术栈」卡片</span>
-            <span class="meta-chip">{{ techStackItems.length }} 个标签</span>
-          </template>
-          <template #actions>
-            <div class="head-right">
-              <el-button size="small" :icon="MagicStick" @click="restoreTechStack">恢复默认</el-button>
-              <el-button size="small" type="primary" plain :icon="Plus" @click="addTechStack">添加</el-button>
-            </div>
-          </template>
-
-          <div v-if="techStackItems.length" class="item-list">
-            <div v-for="(item, index) in techStackItems" :key="index" class="item-row">
-              <el-input v-model="item.name" placeholder="技术名称" class="item-grow" />
-              <el-select v-model="item.color" class="item-color">
-                <el-option v-for="opt in TECH_COLOR_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-              <el-tag :type="item.color" effect="light" class="item-preview">{{ item.name || '预览' }}</el-tag>
-              <div class="item-actions">
-                <el-button :icon="ArrowUp" text size="small" :disabled="index === 0" @click="moveTechStack(index, -1)" />
-                <el-button
-                  :icon="ArrowDown"
-                  text
-                  size="small"
-                  :disabled="index === techStackItems.length - 1"
-                  @click="moveTechStack(index, 1)"
-                />
-                <el-button :icon="Delete" text type="danger" size="small" @click="techStackItems.splice(index, 1)" />
-              </div>
-            </div>
-          </div>
-          <p v-else class="empty-tip">还没有技术栈标签，点「添加」或「恢复默认」开始。</p>
-        </AdminSection>
-
         <!-- 鸣谢 -->
         <AdminSection title="鸣谢" head-wrap>
           <template #meta>
@@ -287,23 +158,13 @@
           </p>
         </AdminSection>
 
-        <!-- 数据驱动的卡片：内容来自数据或接口，不在本页手工编辑 -->
-        <AdminSection title="其他卡片" head-wrap>
-          <template #meta>
-            <span class="meta-chip">内容来自数据 / 接口，不在这里编辑</span>
-          </template>
-
-          <ul class="other-cards">
-            <li class="other-card">
-              <span class="oc-name">更新日志</span>
-              <span class="oc-desc">内容取自「更新日志管理」里发布的记录</span>
-              <el-button link type="primary" size="small" @click="openPane('changelogs')">去维护</el-button>
-            </li>
-            <li class="other-card">
-              <span class="oc-name">最近提交</span>
-              <span class="oc-desc">按「关于作者」里的仓库地址自动从 GitHub 拉取</span>
-            </li>
-          </ul>
+        <AdminSection title="最近提交" head-wrap>
+          <el-form label-position="top" :model="form">
+            <el-form-item label="GitHub 仓库路径">
+              <el-input v-model="form.github_repo" placeholder="owner/repo（也接受完整 GitHub 链接）" />
+            </el-form-item>
+          </el-form>
+          <p class="section-tip">仅用于最近提交卡片，展开时从 GitHub 拉取；留空则不显示该卡片。</p>
         </AdminSection>
       </div>
 
@@ -364,27 +225,18 @@ import {
   Delete,
   Download,
   InfoFilled,
-  MagicStick,
   Plus,
   Refresh,
   View,
 } from '@element-plus/icons-vue';
 import { getAboutPage, updateAboutPage, type AboutPage } from '../../services/admin';
-import type { SocialAutoKind, SocialLinkItem, TechStackItem } from '../../utils/about';
 import {
-  DEFAULT_SOCIAL_LINKS,
-  DEFAULT_TECH_STACK,
-  SOCIAL_AUTO_OPTIONS,
-  SOCIAL_ICON_OPTIONS,
-  TECH_COLOR_OPTIONS,
   githubAvatarUrl,
   normalizeContributors,
-  normalizeSocialLinks,
-  normalizeTechStack,
   type Contributor,
 } from '../../utils/about';
 import AboutPreview from '../../components/AboutPreview.vue';
-import AboutSocialIcon from '../../components/AboutSocialIcon.vue';
+import AboutSocialLinks from '../../components/AboutSocialLinks.vue';
 import {
   downloadCanvas,
   renderNameplate,
@@ -400,16 +252,13 @@ defineProps<{ embedded?: boolean }>();
 
 const router = useRouter();
 
-/** 切到「关于」相关的其他面板：卡片顺序在首页配置，日志有独立的管理页 */
+/** 切到卡片顺序 / 显隐配置面板。 */
 const openPane = (pane: string) => {
   router.push({ path: '/admin/dashboard', query: { pane } });
 };
 
 const form = ref<AboutPage>({
   id: 1,
-  version: '',
-  author_name: '',
-  author_github: '',
   github_repo: '',
   site_name: '',
   tagline: '',
@@ -418,8 +267,6 @@ const form = ref<AboutPage>({
   content_markdown: '',
 });
 
-const techStackItems = ref<TechStackItem[]>([]);
-const socialLinkItems = ref<SocialLinkItem[]>([]);
 const contributorItems = ref<Contributor[]>([]);
 
 const loading = ref(false);
@@ -488,12 +335,7 @@ const buildPayload = (): Partial<AboutPage> => ({
   site_name: (form.value.site_name || '').trim(),
   tagline: (form.value.tagline || '').trim(),
   hero_grid_text: (form.value.hero_grid_text || '').trim(),
-  version: (form.value.version || '').trim(),
-  author_name: (form.value.author_name || '').trim(),
-  author_github: (form.value.author_github || '').trim(),
   github_repo: cleanRepo(form.value.github_repo),
-  tech_stack: normalizeTechStack(techStackItems.value),
-  social_links: normalizeSocialLinks(socialLinkItems.value),
   contributors: normalizeContributors(contributorItems.value),
   content_html: markdownMode.value ? renderedMarkdown.value : form.value.content_html || '',
   content_markdown: markdownMode.value ? contentMarkdown.value : '',
@@ -507,13 +349,7 @@ const previewProps = computed(() => {
     siteName: payload.site_name,
     tagline: payload.tagline,
     gridText: payload.hero_grid_text,
-    version: payload.version,
-    authorName: payload.author_name,
-    authorGithub: payload.author_github,
-    repoName: payload.github_repo,
-    socialLinks: payload.social_links || [],
     contributors: payload.contributors || [],
-    techStack: payload.tech_stack || [],
     contentHtml: payload.content_html || '',
   };
 });
@@ -525,8 +361,6 @@ const applyForm = (data: AboutPage) => {
     content_html: data.content_html || '',
     content_markdown: data.content_markdown || '',
   };
-  techStackItems.value = normalizeTechStack(data.tech_stack);
-  socialLinkItems.value = normalizeSocialLinks(data.social_links);
   contributorItems.value = normalizeContributors(data.contributors);
   contentMarkdown.value = data.content_markdown || '';
   markdownMode.value = !!data.content_markdown;
@@ -574,9 +408,6 @@ const exportNameplate = async (command: 'light' | 'dark' | 'sheet') => {
     const data = {
       siteName: form.value.site_name,
       tagline: form.value.tagline,
-      version: form.value.version,
-      authorName: form.value.author_name,
-      repoName: cleanRepo(form.value.github_repo),
     };
     const stamp = new Date().toISOString().slice(0, 10);
     let mode: 'download' | 'open' = 'download';
@@ -631,17 +462,6 @@ const handleModeChange = (val: boolean) => {
   }
 };
 
-const addTechStack = () => techStackItems.value.push({ name: '', color: 'primary' });
-const restoreTechStack = () => {
-  techStackItems.value = DEFAULT_TECH_STACK.map((item) => ({ ...item }));
-};
-const moveTechStack = (index: number, delta: number) => {
-  const target = index + delta;
-  if (target < 0 || target >= techStackItems.value.length) return;
-  const [moved] = techStackItems.value.splice(index, 1);
-  techStackItems.value.splice(target, 0, moved);
-};
-
 const addContributor = () => contributorItems.value.push({ github: '', name: '' });
 const moveContributor = (index: number, delta: number) => {
   const target = index + delta;
@@ -653,39 +473,8 @@ const moveContributor = (index: number, delta: number) => {
 const contributorInitial = (item: Contributor) =>
   (item.name || item.github || '?').trim().slice(0, 1).toUpperCase();
 
-/** 「添加」下拉：自定义链接，或星标 / 仓库 / 作者这类自动项 */
-const autoOption = (item: SocialLinkItem) => SOCIAL_AUTO_OPTIONS.find((opt) => opt.value === item.auto);
-
-const addSocialItem = (command: 'custom' | SocialAutoKind) => {
-  if (command === 'custom') {
-    socialLinkItems.value.push({ label: '', url: '', icon: 'link' });
-    return;
-  }
-  const option = SOCIAL_AUTO_OPTIONS.find((opt) => opt.value === command);
-  if (option) socialLinkItems.value.push({ label: '', url: '', icon: option.icon, auto: option.value });
-};
-
-const restoreSocialLinks = () => {
-  socialLinkItems.value = DEFAULT_SOCIAL_LINKS.map((item) => ({ ...item }));
-};
-const moveSocialLink = (index: number, delta: number) => {
-  const target = index + delta;
-  if (target < 0 || target >= socialLinkItems.value.length) return;
-  const [moved] = socialLinkItems.value.splice(index, 1);
-  socialLinkItems.value.splice(target, 0, moved);
-};
-
-/** 保存前校验：空名称 / 非法链接直接拦住，避免"填了却没存上" */
+/** 保存前校验鸣谢名单中的 GitHub 用户名 */
 const validate = () => {
-  for (const item of techStackItems.value) {
-    if (!item.name.trim()) return '技术栈里还有没填名称的标签';
-  }
-  for (const item of socialLinkItems.value) {
-    if (item.auto) continue; // 自动项的地址由前台按当前配置补
-    const url = item.url.trim();
-    if (!url) return '社交链接里还有没填地址的条目';
-    if (!/^https?:\/\//i.test(url)) return `社交链接「${item.label || url}」需要以 http:// 或 https:// 开头`;
-  }
   for (const item of contributorItems.value) {
     if (!normalizeContributors([item]).length) return '鸣谢名单里还有没填 GitHub 用户名的条目';
   }
@@ -991,44 +780,6 @@ onBeforeRouteLeave(async () => {
   color: var(--el-text-color-secondary);
 }
 
-/* 数据驱动的卡片：一行一张，只做说明与跳转 */
-.other-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.other-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
-  background-color: var(--el-fill-color-lighter);
-  font-size: 13px;
-}
-
-.oc-name {
-  flex: 0 0 auto;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-}
-
-.oc-desc {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--el-text-color-secondary);
-}
-
-.other-card .el-button {
-  flex: 0 0 auto;
-}
-
 .head-right {
   display: flex;
   align-items: center;
@@ -1068,7 +819,7 @@ onBeforeRouteLeave(async () => {
   width: 160px;
 }
 
-/* 列表型编辑器（技术栈 / 社交链接 / 鸣谢） */
+/* 列表型编辑器（社交链接 / 鸣谢） */
 .item-list {
   display: flex;
   flex-direction: column;
@@ -1088,47 +839,6 @@ onBeforeRouteLeave(async () => {
 .item-grow {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/* 自动项的地址列：只显示取值来源 */
-.auto-source {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.item-label {
-  flex: 0 0 130px;
-  width: 130px;
-}
-
-.item-color {
-  flex: 0 0 100px;
-  width: 100px;
-}
-
-.item-icon {
-  flex: 0 0 130px;
-  width: 130px;
-}
-
-.icon-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.item-preview {
-  flex: 0 0 auto;
-  border: none;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .item-actions {
@@ -1297,16 +1007,9 @@ onBeforeRouteLeave(async () => {
     flex-wrap: wrap;
   }
 
-  .item-label,
-  .item-color,
-  .item-icon,
   .item-name {
     flex: 1 1 45%;
     width: auto;
-  }
-
-  .item-preview {
-    display: none;
   }
 
   .item-actions {

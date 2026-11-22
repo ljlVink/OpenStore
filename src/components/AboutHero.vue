@@ -60,10 +60,7 @@
       <img src="/favicon.svg" alt="" class="hero-logo" />
 
       <div class="hero-main">
-        <div class="hero-title-row">
-          <h1 class="hero-title">{{ displayName }}</h1>
-          <span v-if="displayVersion" class="hero-version">v{{ displayVersion }}</span>
-        </div>
+        <h1 class="hero-title">{{ displayName }}</h1>
         <p v-if="tagline" class="hero-tagline">{{ tagline }}</p>
       </div>
     </div>
@@ -78,7 +75,6 @@ import { GREEN_COLOR, GREEN_OPACITIES, GREEN_PERIOD_COLS, greenCellOpacity, text
 const props = defineProps<{
     siteName?: string;
     tagline?: string;
-    version?: string;
     /**
      * 背景绿格要拼的文字。留空 = 原来的随机贡献图。
      * 填了之后不再滚动（文字要停在原地），格子也会为它重新算尺寸。
@@ -87,12 +83,6 @@ const props = defineProps<{
   }>();
 
 const displayName = computed(() => props.siteName?.trim() || 'OpenStore');
-
-/*
- * 版本号来自更新日志接口，库里可能已经带着 v（如 v2.0.1），也可能只存 2.0.1。
- * 模板固定要加前缀，这里统一先剥掉再拼，避免出现 vv2.0.1。
- */
-const displayVersion = computed(() => (props.version || '').trim().replace(/^v/i, ''));
 
 /** 期望的格子步长（实际会按卡片尺寸微调，保证行列都是整数） */
 const GRID_TARGET_CELL = 14;
@@ -344,13 +334,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.hero-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 .hero-title {
   margin: 0;
   font-size: 26px;
@@ -358,18 +341,6 @@ onBeforeUnmount(() => {
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--el-text-color-primary);
-}
-
-.hero-version {
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--el-color-primary) 40%, transparent);
-  background-color: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
-  color: var(--el-color-primary);
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .hero-tagline {

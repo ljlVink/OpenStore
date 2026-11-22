@@ -49,7 +49,7 @@ describe('SEO URL 归一化', () => {
 
   it('同一页面的不同写法归一到同一 URL', () => {
     expect(norm('/apps/com.demo/')).toBe(`${SITE}/apps/com.demo`);
-    expect(norm('/articles/hello?utm_source=x&from=share')).toBe(`${SITE}/articles/hello`);
+    expect(norm('/topics/hello?utm_source=x&from=share')).toBe(`${SITE}/topics/hello`);
     expect(norm('/dashboard?b=2&a=1')).toBe(`${SITE}/dashboard?a=1&b=2`);
     expect(norm('/dashboard?app_id=9')).toBe(`${SITE}/dashboard?app_id=9`);
     expect(norm('/')).toBe(`${SITE}/`);
@@ -85,11 +85,11 @@ describe('SEO URL 归一化', () => {
     expect(norm('javascript:alert(1)')).toBe('');
   });
 
-  it('过滤后台、接口与静态资源', () => {
-    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/music', '/player', '/uploads/a.png', '/favicon.ico']) {
+  it('过滤后台、接口、静态资源与已下线页面', () => {
+    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/music', '/player', '/articles', '/articles/hello', '/uploads/a.png', '/favicon.ico']) {
       expect(norm(bad)).toBe('');
     }
-    for (const good of ['/apps/com.foo', '/articles/hello', '/rank/category', '/topics/t1', '/about']) {
+    for (const good of ['/apps/com.foo', '/rank/category', '/topics/t1', '/about']) {
       expect(norm(good)).not.toBe('');
     }
   });

@@ -156,7 +156,6 @@
 import {
   DataLine,
   Bell,
-  ChatLineSquare,
   Picture,
   InfoFilled,
   Link,
@@ -166,7 +165,6 @@ import {
   Coin,
   Key,
   Warning,
-  Memo,
   Promotion,
   Setting,
   Expand,
@@ -177,13 +175,12 @@ import {
   import BrandMark from '../../components/BrandMark.vue';
 
   /*
-   * 面板一律按需加载：管理端里公告/关于/更新日志都带 Quill + markdown 渲染器，
+   * 面板一律按需加载：管理端里公告和关于页都带 Quill + markdown 渲染器，
    * 访客/系统日志带 echarts，全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
    * （实测一次加载 240+ 个模块请求、12MB 左右）。改成异步组件后，只加载当前面板需要的那部分。
    */
   const DashboardOverviewView = defineAsyncComponent(() => import('./DashboardOverviewView.vue'));
   const AnnouncementsView = defineAsyncComponent(() => import('./AnnouncementsView.vue'));
-  const CommentsAdminView = defineAsyncComponent(() => import('./CommentsAdminView.vue'));
   const SiteCardsAdminView = defineAsyncComponent(() => import('./SiteCardsAdminView.vue'));
   const AboutManageView = defineAsyncComponent(() => import('./AboutManageView.vue'));
   const FriendLinksView = defineAsyncComponent(() => import('./FriendLinksView.vue'));
@@ -193,7 +190,6 @@ import {
   const SystemLogsView = defineAsyncComponent(() => import('./SystemLogsView.vue'));
   const EnvManagerView = defineAsyncComponent(() => import('./EnvManagerView.vue'));
   const IncidentsAdminView = defineAsyncComponent(() => import('./IncidentsAdminView.vue'));
-  const ChangelogsAdminView = defineAsyncComponent(() => import('./ChangelogsAdminView.vue'));
   const SystemSettingsView = defineAsyncComponent(() => import('./SystemSettingsView.vue'));
   const SeoSubmitView = defineAsyncComponent(() => import('./SeoSubmitView.vue'));
 
@@ -202,11 +198,9 @@ type PaneKey =
   | 'links'
   | 'groups'
   | 'announcements'
-  | 'comments'
   | 'env'
   | 'visitors'
   | 'logs'
-  | 'changelogs'
   | 'site-cards'
   | 'about'
   | 'incidents'
@@ -215,8 +209,8 @@ type PaneKey =
   | 'settings';
 
 const PANE_KEYS: PaneKey[] = [
-  'overview', 'links', 'groups', 'announcements', 'comments', 'env',
-  'visitors', 'logs', 'changelogs', 'site-cards', 'about', 'incidents',
+  'overview', 'links', 'groups', 'announcements', 'env',
+  'visitors', 'logs', 'site-cards', 'about', 'incidents',
   'database', 'seo', 'settings'
 ];
 
@@ -239,10 +233,8 @@ const PANE_COMPONENTS: Record<PaneKey, Component> = {
   links: FriendLinksView,
   groups: GroupChatsView,
   announcements: AnnouncementsView,
-  comments: CommentsAdminView,
   env: EnvManagerView,
   incidents: IncidentsAdminView,
-  changelogs: ChangelogsAdminView,
   'site-cards': SiteCardsAdminView,
   about: AboutManageView,
   visitors: VisitorLogsView,
@@ -291,9 +283,8 @@ const warmUpRestPanes = () => {
 const SECTIONS: Record<string, { title: string; hint: string }> = {
   overview: { title: '数据总览', hint: '访问、内容与实时服务状态' },
   announcements: { title: '公告管理', hint: '公告分类与发布' },
-  comments: { title: '评论管理', hint: '评论审核与筛选' },
   'site-cards': { title: '首页配置', hint: '各页面卡片与拖拽排序' },
-  about: { title: '关于页面', hint: '站点信息、技术栈与页面内容' },
+  about: { title: '关于页面', hint: '站点信息、页面内容与鸣谢' },
   links: { title: '链接管理', hint: '友情链接' },
   groups: { title: '群聊管理', hint: '群聊信息' },
   visitors: { title: '访客日志', hint: '访问记录与筛选' },
@@ -301,7 +292,6 @@ const SECTIONS: Record<string, { title: string; hint: string }> = {
   logs: { title: '系统日志', hint: '后台操作记录' },
   env: { title: '环境变量', hint: '.env 配置项' },
   incidents: { title: '故障维护', hint: '故障与维护公告' },
-  changelogs: { title: '更新日志', hint: '版本更新记录' },
   seo: { title: 'SEO 收录', hint: '访客路径提交、IndexNow 与 sitemap' },
   settings: { title: '主题设置', hint: '配色变量与组件预览' },
 };
@@ -315,7 +305,6 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
     title: '内容',
     items: [
       { key: 'announcements', label: '公告管理', icon: Bell },
-      { key: 'comments', label: '评论管理', icon: ChatLineSquare },
       { key: 'site-cards', label: '首页配置', icon: Picture },
       { key: 'about', label: '关于页面', icon: InfoFilled },
     ],
@@ -340,7 +329,6 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
     items: [
       { key: 'env', label: '环境变量', icon: Key },
       { key: 'incidents', label: '故障维护', icon: Warning },
-      { key: 'changelogs', label: '更新日志', icon: Memo },
       { key: 'seo', label: 'SEO 收录', icon: Promotion },
       { key: 'settings', label: '主题设置', icon: Setting },
     ],

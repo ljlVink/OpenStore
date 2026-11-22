@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { buildAppJsonLd, buildArticleJsonLd, applyJsonLdToHtml } = require('../../server/lib/json-ld.cjs');
+const { buildAppJsonLd, applyJsonLdToHtml } = require('../../server/lib/json-ld.cjs');
 
 /*
  * 结构化数据要「宁缺勿错」：字段缺就不给，不能编造；数值要落在合法区间，
@@ -64,46 +64,6 @@ describe('应用结构化数据', () => {
   it('描述过长会被截断', () => {
     const ld = buildAppJsonLd({ name: 'x', brief_desc: 'a'.repeat(900) }, ctx);
     expect(ld.description.length).toBeLessThanOrEqual(300);
-  });
-});
-
-describe('文章结构化数据', () => {
-  const blog = {
-    title: '部署教程',
-    seo_description: '测试部署教程',
-    summary: '摘要',
-    author_names: 'admin, 张三',
-    published_at: '2026-03-04 08:56:27',
-    updated_at: '2026-03-12 09:44:35'
-  };
-  const ctx = { url: 'https://x.test/articles/a', image: 'https://x.test/c.png', siteName: 'OpenStore' };
-
-  it('基本字段与作者列表', () => {
-    const ld = buildArticleJsonLd(blog, ctx);
-    expect(ld['@type']).toBe('Article');
-    expect(ld.headline).toBe('部署教程');
-    expect(ld.publisher).toEqual({ '@type': 'Organization', name: 'OpenStore' });
-    expect(ld.author).toEqual([
-      { '@type': 'Person', name: 'admin' },
-      { '@type': 'Person', name: '张三' }
-    ]);
-  });
-
-  it('库中的 UTC 时间戳转成 ISO', () => {
-    const ld = buildArticleJsonLd(blog, ctx);
-    expect(ld.datePublished).toBe('2026-03-04T08:56:27.000Z');
-    expect(ld.dateModified).toBe('2026-03-12T09:44:35.000Z');
-  });
-
-  it('没有作者时不输出 author', () => {
-    const ld = buildArticleJsonLd({ title: 'x' }, ctx);
-    expect(ld.author).toBeUndefined();
-    expect(ld.datePublished).toBeUndefined();
-  });
-
-  it('没有标题时返回 null', () => {
-    expect(buildArticleJsonLd({}, ctx)).toBeNull();
-    expect(buildArticleJsonLd(null, ctx)).toBeNull();
   });
 });
 

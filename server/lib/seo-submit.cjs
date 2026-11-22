@@ -193,9 +193,9 @@ const isExcludedPath = (pathname) => {
   if (p.startsWith('/api')) return true;
   if (p.startsWith('/uploads')) return true;
   if (p.startsWith('/assets')) return true;
-  if (['/login', '/admin/login', '/submit'].includes(p)) return true;
+  if (p === '/login') return true;
   // 已下线的页面不应继续从历史访客路径提交收录
-  if (p === '/music' || p === '/player') return true;
+  if (p === '/submit' || p === '/music' || p === '/player' || p === '/articles' || p.startsWith('/articles/')) return true;
   if (STATIC_EXT_RE.test(p)) return true;
   return false;
 };

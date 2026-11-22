@@ -24,9 +24,6 @@ module.exports = [
   { page: 'about', key: 'hero', title: '页面头部', sort_order: 5 },
   { page: 'about', key: 'content', title: '页面内容', sort_order: 10 },
   { page: 'about', key: 'social', title: '联系我们', sort_order: 15 },
-  { page: 'about', key: 'author', title: '关于作者', sort_order: 20 },
-  { page: 'about', key: 'tech-stack', title: '技术栈', sort_order: 30 },
   { page: 'about', key: 'contributors', title: '鸣谢', sort_order: 35 },
-  { page: 'about', key: 'changelogs', title: '更新日志', sort_order: 40 },
   { page: 'about', key: 'commits', title: '最近提交', sort_order: 50 },
 ];

@@ -6,8 +6,8 @@ import { ElMessage } from 'element-plus';
  *
  * 规则：
  * - 探索、应用列表、榜单、专题列表、关于… 这类「栏目页」→ 带网站 logo（/og-image.png）
- * - 应用详情、更新详情、专题详情、文章详情这类「信息页」→ 带当前页面的资源图片
- *   （应用图标 / 文章封面）和它自己的文字信息（名称、开发者、简介）
+ * - 应用详情、更新详情、专题详情这类「信息页」→ 带当前页面的资源图片
+ *   （应用图标 / 专题首图）和它自己的文字信息（名称、开发者、简介）
  *
  * 信息页在数据加载完成后调用 setPageShareMeta 注册，离开时自动清空。
  */
@@ -24,7 +24,7 @@ export interface PageShareMeta {
   title: string;
   /** 卡片描述 */
   description?: string;
-  /** 当前页面的资源图片：应用图标 / 文章封面 / 专题首图 */
+  /** 当前页面的资源图片：应用图标 / 专题首图 */
   image?: string;
   /** 注册它的页面地址：只有还在这个页面上时才生效（防止 keep-alive 缓存里的旧信息串页） */
   ownerKey?: string;
@@ -82,7 +82,7 @@ type RouteLike = {
 };
 
 export interface ShareInfo {
-  /** 分享卡片标题：栏目标题（OpenStore | 探索）或信息页自己的标题（应用名称 / 文章标题） */
+  /** 分享卡片标题：栏目标题（OpenStore | 探索）或信息页自己的标题（应用名称 / 专题标题） */
   title: string;
   description: string;
   image: string;

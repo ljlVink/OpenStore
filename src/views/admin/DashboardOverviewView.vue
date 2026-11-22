@@ -10,7 +10,7 @@
               <el-button link type="primary" @click="$emit('switch-tab', 'visitors')">详细数据</el-button>
             </div>
           </template>
-          <!-- 总访客数 + 独立 IP 并进趋势卡片（原来的三张指标卡已去掉应用/文章两项） -->
+          <!-- 总访客数、独立 IP 与地区数并进趋势卡片 -->
           <div class="visitor-total">
             <div class="visitor-metric">
               <el-icon class="visitor-total-icon"><User /></el-icon>
@@ -134,8 +134,6 @@ const stats = ref<AdminOverviewStats>({
   uniqueIpCount: 0,
   locationKinds: 0,
   appCount: 0,
-  commentCount: 0,
-  articleCount: 0,
   systemUptime: 0,
   nodeVersion: ''
 });

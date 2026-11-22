@@ -266,12 +266,6 @@ const pages = ref<PageProbe[]>([
     probePath: '/api/v0/rankings/download_increase',
   }),
   createProbe<PageProbe>({
-    key: 'articles',
-    name: '文章',
-    route: '/articles',
-    probePath: '/api/public/blogs?limit=1',
-  }),
-  createProbe<PageProbe>({
     key: 'about',
     name: '关于',
     route: '/about',
