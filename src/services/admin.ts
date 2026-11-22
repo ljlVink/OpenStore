@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/auth';
-import type { Contributor } from '../utils/about';
 
 const API_URL = '/api/admin';
 
@@ -100,64 +99,6 @@ export const deleteIncident = async (id: number) => {
   await api.delete(`/incidents/${id}`);
 };
 
-// Friend Links
-export interface FriendLink {
-  id: number;
-  name: string;
-  url: string;
-  icon_url?: string | null;
-  weight: number;
-  enabled: number;
-}
-
-export const getFriendLinks = async (page = 1, pageSize = 10) => {
-  const { data } = await api.get('/friend-links', { params: { page, pageSize } });
-  return data as { items: FriendLink[]; total: number; page: number; pageSize: number };
-};
-export const createFriendLink = async (payload: Partial<FriendLink>) => {
-  const { data } = await api.post('/friend-links', payload);
-  return data.id as number;
-};
-export const updateFriendLink = async (id: number, payload: Partial<FriendLink>) => {
-  await api.put(`/friend-links/${id}`, payload);
-};
-export const deleteFriendLink = async (id: number) => {
-  await api.delete(`/friend-links/${id}`);
-};
-export const batchFriendLinks = async (ids: number[], action: 'enable' | 'disable' | 'delete') => {
-  const { data } = await api.post('/friend-links/batch', { ids, action });
-  return data;
-};
-
-// Group Chats
-export interface GroupChat {
-  id: number;
-  name: string;
-  link?: string;
-  avatar_url?: string;
-  enabled: number;
-}
-export const getGroupChats = async () => {
-  const { data } = await api.get('/group-chats');
-  return data.items as GroupChat[];
-};
-export const createGroupChat = async (payload: Partial<GroupChat>) => {
-  const { data } = await api.post('/group-chats', payload);
-  return data.id as number;
-};
-export const updateGroupChat = async (id: number, payload: Partial<GroupChat>) => {
-  await api.put(`/group-chats/${id}`, payload);
-};
-export const deleteGroupChat = async (id: number) => {
-  await api.delete(`/group-chats/${id}`);
-};
-export const uploadFile = async (file: File) => {
-  const form = new FormData();
-  form.append('file', file);
-  const { data } = await api.post('/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-  return data as { url: string };
-};
-
 // Announcements
 export interface AnnouncementCategory { id: number; name: string; parent_id?: number | null; }
 export interface Announcement {
@@ -245,14 +186,6 @@ export const rollbackEnvByHistoryId = async (id: number) => {
 };
 
 // Public endpoints for homepage
-export const getPublicFriendLinks = async () => {
-  const { data } = await axios.get('/api/public/friend-links');
-  return data.items as FriendLink[];
-};
-export const getPublicGroupChats = async () => {
-  const { data } = await axios.get('/api/public/group-chats');
-  return data.items as GroupChat[];
-};
 export const getPublicAnnouncements = async () => {
   const { data } = await axios.get('/api/public/announcements');
   return data.items as Announcement[];
@@ -302,30 +235,6 @@ export const getSystemLogs = async (
 
 export const deleteSystemLogs = async (ids: number[], clearAll = false) => {
   await api.post('/logs/batch-delete', { ids, clearAll });
-};
-
-export interface AboutPage {
-  id: number;
-  content_html?: string;
-  content_markdown?: string;
-  github_repo?: string;
-  site_name?: string;
-  tagline?: string;
-  /** Hero 背景的绿色格子拼出的文字；留空 = 原来的随机格子 */
-  hero_grid_text?: string | null;
-  /** 鸣谢名单（服务端已解析成数组） */
-  contributors?: Contributor[];
-  updated_at?: string;
-}
-
-export const getAboutPage = async () => {
-  const { data } = await api.get('/about');
-  return (data || {}) as AboutPage;
-};
-
-export const updateAboutPage = async (payload: Partial<AboutPage>) => {
-  const { data } = await api.put('/about', payload);
-  return (data || {}) as { changed?: number; item?: AboutPage };
 };
 
 export interface Visitor {
@@ -543,14 +452,8 @@ export const resetSiteCards = async (page: string) => {
   return data.items as SiteCard[];
 };
 
-export const getPublicSiteCards = async (page?: string, options?: { includeDisabled?: boolean }) => {
-  const params: Record<string, string> = {};
-  if (page) params.page = page;
-  // 关于页需要拿到「已关闭」的卡片才能按配置隐藏，其它页面保持只取启用卡片
-  if (options?.includeDisabled) params.include_disabled = '1';
-  const { data } = await axios.get('/api/public/site-cards', {
-    params: Object.keys(params).length ? params : undefined,
-  });
+export const getPublicSiteCards = async (page: string) => {
+  const { data } = await axios.get('/api/public/site-cards', { params: { page } });
   return data.items as SiteCard[];
 };
 

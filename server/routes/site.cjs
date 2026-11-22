@@ -1,5 +1,5 @@
 /*
- * 站点卡片与关于页
+ * 站点卡片
  */
 const express = require('express');
 const db = require('../database.cjs');
@@ -112,106 +112,13 @@ router.put('/api/site-cards/:id', requireAuth, (req, res) => {
 // Public Site Cards
 router.get('/api/public/site-cards', (req, res) => {
   const page = typeof req.query.page === 'string' && req.query.page.trim() ? req.query.page.trim() : '';
-  /*
-   * 关于页的卡片是固定模板，前端要按后台配置隐藏「已关闭」的卡片，
-   * 所以这里允许显式要求返回全部卡片（含未启用），带上 enabled 让前端自己判断显隐。
-   * 首页 / 系统页仍走默认的 enabled=1 过滤。
-   */
-  const includeDisabled = req.query.include_disabled === '1' || req.query.include_disabled === 'true';
-  const clauses = [];
-  if (!includeDisabled) clauses.push('enabled=1');
-  if (page) clauses.push('page = ?');
-  const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+  const where = page ? 'enabled=1 AND page = ?' : 'enabled=1';
   const order = page ? 'sort_order ASC, id ASC' : 'page ASC, sort_order ASC, id ASC';
-  const sql = `SELECT * FROM site_cards${where} ORDER BY ${order}`;
-
+  const sql = `SELECT * FROM site_cards WHERE ${where} ORDER BY ${order}`;
   db.all(sql, page ? [page] : [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
-});
-
-// About Page
-const ABOUT_SELECT = `SELECT id, content_html, content_markdown, github_repo,
-  site_name, tagline, hero_grid_text, contributors, updated_at
-  FROM about_page WHERE id = 1`;
-
-/**
- * 把 about_page 里的鸣谢名单 JSON 文本还原成数组；未配置或解析失败时留空。
- */
-const parseJsonList = (raw) => {
-  if (raw === null || raw === undefined || raw === '') return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const shapeAboutRow = (row) => {
-  if (!row) return {};
-  return {
-    ...row,
-    contributors: parseJsonList(row.contributors),
-  };
-};
-
-/** 前端可能传数组，也可能直接传 JSON 字符串；统一成待落库的文本 */
-const serializeList = (value) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return JSON.stringify(value);
-  return null;
-};
-
-router.get('/api/about', (req, res) => {
-  db.get(ABOUT_SELECT, [], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(shapeAboutRow(row));
-  });
-});
-
-router.put('/api/about', requireAuth, (req, res) => {
-  const body = req.body || {};
-
-  /*
-   * 只更新请求里带的字段：
-   * 后台的各个分区可能分开保存，缺字段不能把这个字段清成 NULL。
-   */
-  const columns = ['content_html', 'content_markdown', 'github_repo', 'site_name', 'tagline', 'hero_grid_text'];
-  const fields = [];
-  const values = [];
-
-  columns.forEach((column) => {
-    if (body[column] === undefined) return;
-    fields.push(`${column} = ?`);
-    values.push(body[column]);
-  });
-
-  if (body.contributors !== undefined) {
-    fields.push('contributors = ?');
-    values.push(serializeList(body.contributors));
-  }
-
-  if (!fields.length) return res.status(400).json({ error: 'nothing to update' });
-
-  db.run(
-    `UPDATE about_page SET ${fields.join(', ')}, updated_at=CURRENT_TIMESTAMP WHERE id=1`,
-    values,
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      logAction(req.user?.username, 'update', 'about_page', 1, { fields: columns.filter((c) => body[c] !== undefined) });
-      // 更新后回读一次：前台和后台都拿解析好的数组，不用各自再解析
-      db.get(ABOUT_SELECT, [], (e2, row) => {
-        if (e2) return res.json({ changed: this.changes });
-        const item = shapeAboutRow(row);
-        // 前台「关于」页据此作废缓存并重新拉取（保存即生效）
-        broadcast('about:update', item);
-        res.json({ changed: this.changes, item });
-      });
-    }
-  );
 });
 
 module.exports = router;

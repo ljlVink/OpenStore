@@ -1,7 +1,7 @@
 <template>
   <div class="social-links">
     <a
-      :href="TELEGRAM_CONTACT_URL"
+      href="https://t.me/firmwarefetcher"
       target="_blank"
       rel="noopener noreferrer"
       class="social-chip"
@@ -18,10 +18,6 @@
     </a>
   </div>
 </template>
-
-<script setup lang="ts">
-import { TELEGRAM_CONTACT_URL } from '../utils/about';
-</script>
 
 <style scoped>
 .social-links {

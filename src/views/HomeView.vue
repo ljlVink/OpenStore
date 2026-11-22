@@ -83,50 +83,7 @@
                </div>
             </template>
 
-            <template v-if="card.key === 'friend_links'">
-              <div v-if="friendLinks.length > 0" class="friend-links-grid">
-                <a
-                  v-for="item in friendLinks"
-                  :key="item.id"
-                  class="friend-link-item"
-                  :href="item.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <img :src="friendLinkIcon(item)" class="friend-link-icon" alt="" />
-                  <span class="friend-link-name">{{ item.name }}</span>
-                </a>
-              </div>
-              <div v-else class="empty-text">暂无链接</div>
-            </template>
-
-            <template v-else-if="card.key === 'group_chats'">
-              <div v-if="groupChats.length > 0" class="group-chats-grid">
-                <template v-for="item in groupChats" :key="item.id">
-                  <a
-                    v-if="item.link"
-                    class="group-chat-item"
-                    :href="item.link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <el-avatar :size="32" :src="item.avatar_url || undefined">
-                      {{ item.name?.slice(0, 1) }}
-                    </el-avatar>
-                    <span class="group-chat-name">{{ item.name }}</span>
-                  </a>
-                  <div v-else class="group-chat-item is-disabled">
-                    <el-avatar :size="32" :src="item.avatar_url || undefined">
-                      {{ item.name?.slice(0, 1) }}
-                    </el-avatar>
-                    <span class="group-chat-name">{{ item.name }}</span>
-                  </div>
-                </template>
-              </div>
-              <div v-else class="empty-text">暂无群聊</div>
-            </template>
-
-            <template v-else-if="card.key === 'announcements'">
+            <template v-if="card.key === 'announcements'">
               <div v-if="announcements.length > 0" class="announcements-list">
                 <div v-for="item in announcements" :key="item.id" class="announcement-item">
                   <div class="announcement-title">{{ item.title }}</div>
@@ -155,10 +112,6 @@
                 </template>
               </div>
               <div v-else class="empty-text">暂无应用</div>
-            </template>
-
-            <template v-else>
-              <el-empty description="暂不支持的卡片" />
             </template>
           </el-card>
         </el-col>
@@ -196,13 +149,9 @@ import AppListSection from '../components/AppListSection.vue';
 import {
   getPublicAnnouncements,
   getPublicApps,
-  getPublicFriendLinks,
-  getPublicGroupChats,
   getPublicSiteCards,
   type Announcement,
   type AppItem,
-  type FriendLink,
-  type GroupChat,
   type SiteCard,
 } from '../services/admin';
 import { getAppIconUrl } from '../utils/app-info';
@@ -306,8 +255,6 @@ const loadHomeCards = async (force = false) => {
     homeCardsReady.value = true;
   }
 };
-const friendLinks = ref<FriendLink[]>([]);
-const groupChats = ref<GroupChat[]>([]);
 const announcements = ref<Announcement[]>([]);
 const publicApps = ref<AppItem[]>([]);
 const homeTab = ref<'home' | 'system'>('home');
@@ -353,20 +300,6 @@ const rankOrderOf = (card: SiteCard): 'stacked' | 'classic' => {
   return 'stacked';
 };
 
-const faviconUrl = (rawUrl: string) => {
-  try {
-    const u = new URL(rawUrl);
-    return `${u.origin}/favicon.ico`;
-  } catch {
-    return '/favicon.svg';
-  }
-};
-
-const friendLinkIcon = (item: FriendLink) => {
-  const icon = typeof item.icon_url === 'string' ? item.icon_url.trim() : '';
-  return icon || faviconUrl(item.url);
-};
-
 let siteCardsFetchedAt = 0;
 let siteCardsLoaded = false;
 /** 上次已经拉过内容的卡片组合，用来判断要不要重新请求那批内容接口 */
@@ -375,8 +308,8 @@ let loadedContentKeys = '';
 const loadSiteCards = async (force = false) => {
   if (!force && siteCardsLoaded && Date.now() - siteCardsFetchedAt < SITE_CONFIG_REFRESH_MS) return;
   try {
-    // 「推荐」页签的信息卡片（公告 / 应用 / 链接 / 群聊）
-    siteCards.value = await getPublicSiteCards('system');
+    siteCards.value = (await getPublicSiteCards('system'))
+      .filter(({ key }) => key === 'announcements' || key === 'apps');
   } catch {
     siteCards.value = [];
     siteCardsLoaded = true;
@@ -385,7 +318,7 @@ const loadSiteCards = async (force = false) => {
   }
 
   const enabledKeys = new Set(siteCards.value.map((c) => c.key));
-  const contentKeys = [...enabledKeys].filter((key) => ['friend_links', 'group_chats', 'announcements', 'apps'].includes(key)).sort().join('|');
+  const contentKeys = [...enabledKeys].sort().join('|');
   siteCardsLoaded = true;
   siteCardsFetchedAt = Date.now();
 
@@ -394,28 +327,6 @@ const loadSiteCards = async (force = false) => {
   loadedContentKeys = contentKeys;
 
   const tasks: Array<Promise<void>> = [];
-  if (enabledKeys.has('friend_links')) {
-    tasks.push(
-      getPublicFriendLinks()
-        .then((items) => {
-          friendLinks.value = items;
-        })
-        .catch(() => {
-          friendLinks.value = [];
-        })
-    );
-  }
-  if (enabledKeys.has('group_chats')) {
-    tasks.push(
-      getPublicGroupChats()
-        .then((items) => {
-          groupChats.value = items;
-        })
-        .catch(() => {
-          groupChats.value = [];
-        })
-    );
-  }
   if (enabledKeys.has('announcements')) {
     tasks.push(
       getPublicAnnouncements()
@@ -673,98 +584,6 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-.friend-links-grid {
-  /* 用自适应网格：列宽随卡片宽度伸缩，能放几列就放几列，避免固定宽度导致右侧留空 */
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px 12px;
-}
-
-.friend-link-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  min-height: 44px;
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  text-decoration: none;
-  color: var(--el-text-color-regular);
-  background: var(--el-bg-color);
-  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
-}
-
-.friend-link-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  color: var(--el-text-color-primary);
-  transform: translateY(-1px);
-}
-
-.friend-link-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  object-fit: contain;
-}
-
-.friend-link-name {
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.group-chats-grid {
-  /* 与「友接」保持一致：列宽自适应卡片宽度，能放几列放几列 */
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.group-chat-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  min-height: 44px;
-  min-width: 0;
-  box-sizing: border-box;
-  border-radius: 12px;
-  border: 1px solid var(--el-border-color-lighter);
-  text-decoration: none;
-  color: var(--el-text-color-regular);
-  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
-}
-
-.group-chat-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  color: var(--el-text-color-primary);
-  transform: translateY(-1px);
-}
-
-.group-chat-item.is-disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-
-.group-chat-item.is-disabled:hover {
-  border-color: var(--el-border-color-lighter);
-  color: var(--el-text-color-regular);
-}
-
-.group-chat-name {
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .announcements-list {
   display: flex;
   flex-direction: column;
@@ -853,17 +672,6 @@ onUnmounted(() => {
 
   .site-card :deep(.el-card__body) {
     padding: 12px 14px;
-  }
-
-  .friend-link-item {
-    padding: 6px 10px;
-    width: 100%;
-    flex-basis: 100%;
-  }
-
-  .group-chat-item {
-    width: 100%;
-    flex-basis: 100%;
   }
 }
 

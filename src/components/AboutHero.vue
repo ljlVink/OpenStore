@@ -1,7 +1,7 @@
 <template>
   <section class="about-hero" :style="gridVars">
     <!-- 背景纹理：GitHub 贡献图式的圆角格子，缓慢向左滚动 -->
-    <div ref="gridRef" class="hero-grid" :class="{ 'is-text': useText }" aria-hidden="true">
+    <div ref="gridRef" class="hero-grid" aria-hidden="true">
       <div class="hero-grid-scroll">
         <svg
           class="hero-grid-accent"
@@ -60,8 +60,8 @@
       <img src="/favicon.svg" alt="" class="hero-logo" />
 
       <div class="hero-main">
-        <h1 class="hero-title">{{ displayName }}</h1>
-        <p v-if="tagline" class="hero-tagline">{{ tagline }}</p>
+        <h1 class="hero-title">OpenStore</h1>
+        <p class="hero-tagline">鸿蒙应用数据探索与分析平台</p>
       </div>
     </div>
 
@@ -70,30 +70,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { GREEN_COLOR, GREEN_OPACITIES, GREEN_PERIOD_COLS, greenCellOpacity, textToCells } from '../utils/hero-grid';
-
-const props = defineProps<{
-    siteName?: string;
-    tagline?: string;
-    /**
-     * 背景绿格要拼的文字。留空 = 原来的随机贡献图。
-     * 填了之后不再滚动（文字要停在原地），格子也会为它重新算尺寸。
-     */
-    gridText?: string | null;
-  }>();
-
-const displayName = computed(() => props.siteName?.trim() || 'OpenStore');
+import { GREEN_PERIOD_COLS, greenCellOpacity } from '../utils/hero-grid';
 
 /** 期望的格子步长（实际会按卡片尺寸微调，保证行列都是整数） */
 const GRID_TARGET_CELL = 14;
-/**
- * 拼文字时用更细的格子：字号是跟着卡片高度走的，格子越细 = 覆盖文字的格子越多、
- * 字形越准。14px 那种大格只有 10 行，字母会糊成方块。
- */
-const GRID_TARGET_CELL_TEXT = 6;
 /** 底纹向左滚动的速度（px/秒），实际时长按滚动一个周期的距离换算 */
 const GRID_DRIFT_SPEED = 5;
-/** 格子内部的留白与圆角（单位是「格」，和 about-nameplate.ts 的 2.5/14、9/14、2/14 对齐） */
+/** 格子内部的留白与圆角（单位是「格」） */
 const GREEN_CELL_INSET = 2.5 / 14;
 const GREEN_CELL_SIZE = 9 / 14;
 const GREEN_CELL_RX = 2 / 14;
@@ -101,10 +84,6 @@ const GREEN_CELL_RX = 2 / 14;
 const gridRef = ref<HTMLElement | null>(null);
 const gridSize = ref({ width: 0, height: 0 });
 let resizeObserver: ResizeObserver | null = null;
-
-/** 后台配置的文字（留空 = 原来的随机格子） */
-const gridText = computed(() => (props.gridText || '').trim());
-const useText = computed(() => gridText.value.length > 0);
 
 /*
  * 格子自适应卡片：按卡片尺寸取整数行列，格子尺寸 = 卡片尺寸 / 行列数，
@@ -121,56 +100,21 @@ const measureGrid = () => {
   gridSize.value = { width, height };
 };
 
-const targetCell = computed(() => (useText.value ? GRID_TARGET_CELL_TEXT : GRID_TARGET_CELL));
-const gridCols = computed(() => Math.max(1, Math.round(gridSize.value.width / targetCell.value)));
-const gridRows = computed(() => Math.max(1, Math.round(gridSize.value.height / targetCell.value)));
-const cellW = computed(() => gridSize.value.width / gridCols.value);
-const cellH = computed(() => gridSize.value.height / gridRows.value);
-
-/*
- * 横向要多铺一份才够滚动：
- *   - 随机格子：多铺一个 128 列的周期（哈希本身按 128 列循环）；
- *   - 拼文字：把文字按「一屏宽」重复一份，滚动一屏后正好接上，同样无缝。
- */
-const driftCols = computed(() => (useText.value ? gridCols.value : GREEN_PERIOD_COLS));
-const totalCols = computed(() => gridCols.value + driftCols.value);
+const gridCols = computed(() => Math.max(1, Math.round(gridSize.value.width / GRID_TARGET_CELL)));
+const gridRows = computed(() => Math.max(1, Math.round(gridSize.value.height / GRID_TARGET_CELL)));
+// 多铺一个 128 列的周期，让滚动首尾无缝衔接。
+const totalCols = computed(() => gridCols.value + GREEN_PERIOD_COLS);
+const drift = computed(() => (gridSize.value.width / gridCols.value) * GREEN_PERIOD_COLS);
 
 const gridVars = computed<Record<string, string>>(() => ({
-  '--hero-grid-green': GREEN_COLOR,
-  '--grid-cell-w': `${cellW.value}px`,
-  '--grid-cell-h': `${cellH.value}px`,
-  // 滚动一个周期的距离（随机 = 128 列；文字 = 一屏宽）
-  '--grid-drift': `${cellW.value * driftCols.value}px`,
+  '--grid-drift': `${drift.value}px`,
   // 按同一速度换算时长，卡片大小变化时观感一致
-  '--grid-drift-duration': `${Math.max(1, Math.round((cellW.value * driftCols.value) / GRID_DRIFT_SPEED))}s`
+  '--grid-drift-duration': `${Math.max(1, Math.round(drift.value / GRID_DRIFT_SPEED))}s`
 }));
 
-/*
- * 点亮格：
- *   - 配了文字 → 把文字栅格化成格子（不滚动，文字停在中间）；
- *   - 没配文字 → 按 (列, 行) 哈希生成的随机贡献图（要多出一个周期用于滚动）。
- * 坐标用「格」为单位（viewBox 也是格数），SVG 拉伸后正好落在底纹的格点上。
- */
+// SVG 的 viewBox 也以格为单位，绿格正好落在底纹的格点上。
 const greenCells = computed<{ key: string; x: number; y: number; opacity: number }[]>(() => {
   const cells: { key: string; x: number; y: number; opacity: number }[] = [];
-  if (!gridCols.value || !gridRows.value) return cells;
-
-  if (useText.value) {
-    /*
-     * 文字统一用最亮那一档，读起来才清楚；再按一屏宽复制一份供无缝滚动。
-     * 起步对齐到格子左边 —— 动画是往左滚的，这样每一份都是从「文字开头」
-     * 从右边滚进来（居中起步的话，一开始看到的就是半截）。
-     */
-    const lit = textToCells(gridText.value, gridCols.value, gridRows.value, { align: 'left', sample: 8 });
-    const brightest = GREEN_OPACITIES[GREEN_OPACITIES.length - 1];
-    for (const offset of [0, gridCols.value]) {
-      for (const { col, row } of lit) {
-        cells.push({ key: `${offset}-${col}-${row}`, x: col + offset, y: row, opacity: brightest });
-      }
-    }
-    return cells;
-  }
-
   for (let row = 0; row < gridRows.value; row += 1) {
     for (let col = 0; col < totalCols.value; col += 1) {
       const opacity = greenCellOpacity(col, row);
@@ -246,22 +190,6 @@ onBeforeUnmount(() => {
   mask-size: 100% 100%;
 }
 
-/*
- * 拼文字时渐隐要放松一些：
- * 文字是从最左边起步往左滚的，如果还按原来「左侧 40% 全透明」，
- * 一进页面看到的就是一张空卡片（文字正走在看不见的那一段）。
- * 这里只保留一点淡淡的压暗，让 logo/标题仍然清楚。
- */
-.hero-grid.is-text {
-  --hero-grid-fade: linear-gradient(
-    to right,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.6) 16%,
-    #000 34%,
-    #000 100%
-  );
-}
-
 /* 滚动层：比容器多出一个周期，向左平移一个周期后无缝衔接 */
 .hero-grid-scroll {
   position: absolute;
@@ -291,7 +219,7 @@ onBeforeUnmount(() => {
 
 /* 绿色贡献格：由 greenCells 按坐标哈希生成，深浅由每格 fill-opacity 决定 */
 .hero-grid-cells {
-  fill: var(--hero-grid-green, #39d353);
+  fill: #39d353;
   opacity: 0.28;
 }
 

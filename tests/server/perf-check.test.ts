@@ -44,11 +44,11 @@ describe('接口体检的路由挑选', () => {
         leaf('/api/public/submit', ['post']),
         leaf('/assets/app.js'),
         leaf('/health'),
-        leaf('/api/about'),
+        leaf('/api/public/site-cards'),
       ])
     );
 
-    expect(routes).toEqual(['/api/about']);
+    expect(routes).toEqual(['/api/public/site-cards']);
   });
 
   it('结果按路径升序，便于和上一次体检对比', () => {

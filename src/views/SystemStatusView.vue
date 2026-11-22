@@ -186,7 +186,7 @@ const PROBE_TIMEOUT_MS = 10000;
 interface Probe {
   key: string;
   name: string;
-  /** 实际探测的接口路径（同源，走本站代理） */
+  /** 实际探测的同源接口或静态页面路径 */
   probePath: string;
   online: boolean;
   latency: number;
@@ -230,8 +230,8 @@ const services = ref<ServiceProbe[]>([
 ]);
 
 /*
- * 页面接口：每个页面挑一个「打不开时一定出问题」的接口。
- * 全部用无参数的 GET，且尽量带上 page_size / limit 把响应体压到最小，
+ * 动态页面检测必需的接口；没有数据依赖的页面直接检测页面地址。
+ * 全部用 GET 并尽量带上 page_size / limit 把响应体压到最小，
  * 避免监控本身变成流量负担。
  */
 const pages = ref<PageProbe[]>([
@@ -269,7 +269,7 @@ const pages = ref<PageProbe[]>([
     key: 'about',
     name: '关于',
     route: '/about',
-    probePath: '/api/about',
+    probePath: '/about',
   }),
 ]);
 

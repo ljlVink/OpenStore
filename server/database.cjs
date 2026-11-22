@@ -73,33 +73,6 @@ db.serialize(() => {
     }
   });
 
-  db.run(`CREATE TABLE IF NOT EXISTS friend_links (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    weight INTEGER DEFAULT 0,
-    enabled INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS friend_link_icons (
-    friend_link_id INTEGER PRIMARY KEY,
-    icon_url TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS group_chats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    link TEXT,
-    avatar_url TEXT,
-    enabled INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
   db.run(`CREATE TABLE IF NOT EXISTS announcement_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -232,8 +205,7 @@ db.serialize(() => {
 
   const seedSiteCards = () => {
     db.run(`DELETE FROM site_cards WHERE page = 'home' AND key IN ('system-status', 'overview', 'chart-distribution')`);
-    db.run(`DELETE FROM site_cards WHERE page = 'about' AND key IN ('feedback', 'tech-stack', 'changelogs', 'author')`);
-    db.run(`DELETE FROM site_cards WHERE page = 'system' AND key = 'music'`);
+    db.run(`DELETE FROM site_cards WHERE page = 'about' OR (page = 'system' AND key IN ('music', 'friend_links', 'group_chats'))`);
     defaultSiteCards.forEach(card => {
       db.run(
         `INSERT OR IGNORE INTO site_cards (page, key, title, sort_order, style) VALUES (?, ?, ?, ?, ?)`,
@@ -267,32 +239,6 @@ db.serialize(() => {
       db.run(`DROP TABLE site_cards`);
       db.run(`ALTER TABLE site_cards_page_migration RENAME TO site_cards`, () => seedSiteCards());
     });
-  });
-
-  db.run(`CREATE TABLE IF NOT EXISTS about_page (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    content_html TEXT,
-    content_markdown TEXT,
-    github_repo TEXT,
-    site_name TEXT,
-    tagline TEXT,
-    contributors TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Seed about_page
-  db.get(`SELECT id FROM about_page WHERE id = 1`, [], (err, row) => {
-    if (!row) {
-      db.run(
-        `INSERT INTO about_page
-           (id, content_html, site_name, tagline)
-         VALUES (1, '', ?, ?)`,
-        [
-          'OpenStore',
-          '鸿蒙应用数据探索与分析平台',
-        ]
-      );
-    }
   });
 
   /*
@@ -427,22 +373,13 @@ db.serialize(() => {
   ensureColumn('visitors', 'via_upstream', 'INTEGER DEFAULT 0');
   ensureColumn('announcements', 'published_at', 'DATETIME');
   ensureColumn('announcements', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
-  ensureColumn('group_chats', 'enabled', 'INTEGER DEFAULT 1');
   ensureColumn('apps', 'icon_url', 'TEXT');
   ensureColumn('apps', 'kind_name', 'TEXT');
   ensureColumn('apps', 'average_rating', 'TEXT');
   ensureColumn('apps', 'download_count_str', 'TEXT');
   ensureColumn('apps', 'original_id', 'TEXT');
-  ensureColumn('about_page', 'github_repo', 'TEXT');
   // 事故 / 维护 / 提示 卡片的图标（存图标名，前台按名字取 SVG；留空则按类型取默认图标）
   ensureColumn('incidents', 'icon', 'TEXT');
-  ensureColumn('about_page', 'content_markdown', 'TEXT');
-  // 关于页面 Hero 与可配置内容：站点名、一句话简介、鸣谢名单（JSON 字符串）
-  ensureColumn('about_page', 'site_name', 'TEXT');
-  ensureColumn('about_page', 'tagline', 'TEXT');
-  // Hero 背景那个「绿色贡献格」要拼的文字；留空 = 用原来的随机格子
-  ensureColumn('about_page', 'hero_grid_text', 'TEXT');
-  ensureColumn('about_page', 'contributors', 'TEXT');
 });
 
 module.exports = db;

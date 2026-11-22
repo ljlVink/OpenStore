@@ -13,10 +13,7 @@ export const contentVersion = ref(0);
 /** 会触发前台刷新的后台事件（日志类不在此列） */
 const CONTENT_EVENTS = new Set([
   'site_cards:update',
-  'about:update',
   'announcements:update',
-  'links:update',
-  'groups:update',
   'incidents:update',
 ]);
 

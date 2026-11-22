@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { translateAppsListCall } from './upstream-compat';
-import type { Contributor } from '../utils/about';
 
 // Use same-origin relative base URL; Nginx/BT 反向代理到后端
 const API_URL = '/api';
@@ -289,68 +288,6 @@ export const exportVisitors = async (): Promise<void> => {
   link.remove();
 };
 
-// Friend Links
-export interface FriendLink {
-  id: number;
-  name: string;
-  url: string;
-  icon_url?: string;
-  weight: number;
-  enabled: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export const getFriendLinks = async (page: number = 1, pageSize: number = 10): Promise<{ items: FriendLink[]; total: number }> => {
-  const response = await apiClient.get('/friend-links', { params: { page, pageSize } });
-  return response.data;
-};
-
-export const getPublicFriendLinks = async (): Promise<FriendLink[]> => {
-  const response = await apiClient.get('/public/friend-links');
-  return response.data.items || [];
-};
-
-export const createFriendLink = async (data: Partial<FriendLink>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/friend-links', data);
-  return response.data;
-};
-
-export const updateFriendLink = async (id: number, data: Partial<FriendLink>): Promise<void> => {
-  await apiClient.put(`/friend-links/${id}`, data);
-};
-
-export const deleteFriendLink = async (id: number): Promise<void> => {
-  await apiClient.delete(`/friend-links/${id}`);
-};
-
-// Group Chats
-export interface GroupChat {
-  id: number;
-  name: string;
-  link?: string;
-  avatar_url?: string;
-  enabled: number;
-}
-export const getGroupChats = async (): Promise<GroupChat[]> => {
-  const response = await apiClient.get('/group-chats');
-  return response.data.items || [];
-};
-export const getPublicGroupChats = async (): Promise<GroupChat[]> => {
-  const response = await apiClient.get('/public/group-chats');
-  return response.data.items || [];
-};
-export const createGroupChat = async (data: Partial<GroupChat>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/group-chats', data);
-  return response.data;
-};
-export const updateGroupChat = async (id: number, data: Partial<GroupChat>): Promise<void> => {
-  await apiClient.put(`/group-chats/${id}`, data);
-};
-export const deleteGroupChat = async (id: number): Promise<void> => {
-  await apiClient.delete(`/group-chats/${id}`);
-};
-
 // Announcements
 export interface Announcement {
   id: number;
@@ -421,29 +358,6 @@ export const getPublicSiteCards = async (): Promise<SiteCard[]> => {
 };
 export const updateSiteCard = async (id: number, data: Partial<SiteCard>): Promise<void> => {
   await apiClient.put(`/site-cards/${id}`, data);
-};
-
-// About Page
-export interface AboutPage {
-  id: number;
-  content_html?: string;
-  content_markdown?: string;
-  github_repo?: string;
-  /** Hero 上的站点名 */
-  site_name?: string;
-  /** Hero 上的一句话简介 */
-  tagline?: string;
-  /** Hero 背景的绿色格子拼出的文字；留空 = 原来的随机格子 */
-  hero_grid_text?: string | null;
-  /** 鸣谢名单，服务端已从 JSON 文本解析成数组 */
-  contributors?: Contributor[];
-}
-export const getAboutPage = async (): Promise<AboutPage> => {
-  const response = await apiClient.get('/about');
-  return response.data || {};
-};
-export const updateAboutPage = async (data: Partial<AboutPage>): Promise<void> => {
-  await apiClient.put('/about', data);
 };
 
 // Env Vars

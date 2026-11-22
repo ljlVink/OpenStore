@@ -7,9 +7,7 @@
 const FRESHNESS_SOURCES = [
   // 只统计「前台访客真的会读到」的数据；访客统计、后端进程这类纯后台信息不再出现在这里
   { key: 'apps', label: '应用库', table: 'apps', column: 'updated_at', ttl: 86400 },
-  { key: 'announcements', label: '公告', table: 'announcements', column: 'updated_at', ttl: 604800 },
-  { key: 'friend_links', label: '友情链接', table: 'friend_links', column: 'updated_at', ttl: 2592000 },
-  { key: 'group_chats', label: '群聊', table: 'group_chats', column: 'updated_at', ttl: 2592000 }
+  { key: 'announcements', label: '公告', table: 'announcements', column: 'updated_at', ttl: 604800 }
 ];
 
 // 页面访问新鲜度：访客表里存的是前台页面路径，这里聚合成「哪个页面最近被访问、近 30 天被访问多少次」。

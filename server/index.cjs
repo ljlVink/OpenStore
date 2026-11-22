@@ -307,7 +307,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 
 app.use((req, res, next) => {
-  const isPublicApi = req.path.startsWith('/api/public/') || req.path.startsWith('/api/v0/') || req.path === '/api/monitors' || req.path === '/api/about';
+  const isPublicApi = req.path.startsWith('/api/public/') || req.path.startsWith('/api/v0/') || req.path === '/api/monitors';
 
   // 后端自己发起的重放请求不计入访客统计（否则重放一次公开接口就会多一个"访客"）
   const isReplayRequest = req.headers['x-openstore-replay'] === '1';
@@ -489,13 +489,11 @@ mountRouter('media', require('./routes/media.cjs'));          // 应用截图同
 mountRouter('monitors', require('./routes/monitors.cjs'));    // UptimeRobot 监控状态
 mountRouter('visitors', require('./routes/visitors.cjs'));    // 访客日志：列表 / 趋势 / 单 IP 历史 / 导出
 mountRouter('database', require('./routes/database.cjs'));    // 数据库管理
-mountRouter('friend-links', require('./routes/friend-links.cjs')); // 友情链接
-mountRouter('group-chats', require('./routes/group-chats.cjs'));   // 群聊
 mountRouter('incidents', require('./routes/incidents.cjs'));  // 服务事故 / 维护公告
 mountRouter('public-content', require('./routes/public-content.cjs')); // 前台公开内容：应用与公告
 mountRouter('content-admin', require('./routes/content-admin.cjs'));   // 公告与公告分类
 mountRouter('diagnostics', require('./routes/diagnostics.cjs'));   // 客户端 IP 诊断
-mountRouter('site', require('./routes/site.cjs'));           // 站点卡片 / 关于页
+mountRouter('site', require('./routes/site.cjs'));           // 站点卡片
 mountRouter('env-logs', require('./routes/env-logs.cjs'));    // 环境变量 / 操作日志
 /*
  * SEO 收录提交（/api/admin/seo/*）。

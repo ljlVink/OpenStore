@@ -157,9 +157,6 @@ import {
   DataLine,
   Bell,
   Picture,
-  InfoFilled,
-  Link,
-  ChatDotRound,
   View,
   List,
   Coin,
@@ -175,16 +172,13 @@ import {
   import BrandMark from '../../components/BrandMark.vue';
 
   /*
-   * 面板一律按需加载：管理端里公告和关于页都带 Quill + markdown 渲染器，
+   * 面板一律按需加载：公告管理带 Quill + markdown 渲染器，
    * 访客/系统日志带 echarts，全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
    * （实测一次加载 240+ 个模块请求、12MB 左右）。改成异步组件后，只加载当前面板需要的那部分。
    */
   const DashboardOverviewView = defineAsyncComponent(() => import('./DashboardOverviewView.vue'));
   const AnnouncementsView = defineAsyncComponent(() => import('./AnnouncementsView.vue'));
   const SiteCardsAdminView = defineAsyncComponent(() => import('./SiteCardsAdminView.vue'));
-  const AboutManageView = defineAsyncComponent(() => import('./AboutManageView.vue'));
-  const FriendLinksView = defineAsyncComponent(() => import('./FriendLinksView.vue'));
-  const GroupChatsView = defineAsyncComponent(() => import('./GroupChatsView.vue'));
   const VisitorLogsView = defineAsyncComponent(() => import('./VisitorLogsView.vue'));
   const DatabaseAdminView = defineAsyncComponent(() => import('./DatabaseAdminView.vue'));
   const SystemLogsView = defineAsyncComponent(() => import('./SystemLogsView.vue'));
@@ -195,22 +189,19 @@ import {
 
 type PaneKey =
   | 'overview'
-  | 'links'
-  | 'groups'
   | 'announcements'
   | 'env'
   | 'visitors'
   | 'logs'
   | 'site-cards'
-  | 'about'
   | 'incidents'
   | 'database'
   | 'seo'
   | 'settings';
 
 const PANE_KEYS: PaneKey[] = [
-  'overview', 'links', 'groups', 'announcements', 'env',
-  'visitors', 'logs', 'site-cards', 'about', 'incidents',
+  'overview', 'announcements', 'env',
+  'visitors', 'logs', 'site-cards', 'incidents',
   'database', 'seo', 'settings'
 ];
 
@@ -230,13 +221,10 @@ const active = ref<PaneKey>(paneFromQuery());
 // 面板 → 组件：全部挂载着，非当前面板加 is-parked 隐藏，切回来不重新请求
 const PANE_COMPONENTS: Record<PaneKey, Component> = {
   overview: DashboardOverviewView,
-  links: FriendLinksView,
-  groups: GroupChatsView,
   announcements: AnnouncementsView,
   env: EnvManagerView,
   incidents: IncidentsAdminView,
   'site-cards': SiteCardsAdminView,
-  about: AboutManageView,
   visitors: VisitorLogsView,
   database: DatabaseAdminView,
   logs: SystemLogsView,
@@ -283,10 +271,7 @@ const warmUpRestPanes = () => {
 const SECTIONS: Record<string, { title: string; hint: string }> = {
   overview: { title: '数据总览', hint: '访问、内容与实时服务状态' },
   announcements: { title: '公告管理', hint: '公告分类与发布' },
-  'site-cards': { title: '首页配置', hint: '各页面卡片与拖拽排序' },
-  about: { title: '关于页面', hint: '站点信息、页面内容与鸣谢' },
-  links: { title: '链接管理', hint: '友情链接' },
-  groups: { title: '群聊管理', hint: '群聊信息' },
+  'site-cards': { title: '首页配置', hint: '探索页和推荐页的卡片与拖拽排序' },
   visitors: { title: '访客日志', hint: '访问记录与筛选' },
   database: { title: '数据管理', hint: '表数据、维护、备份与只读查询' },
   logs: { title: '系统日志', hint: '后台操作记录' },
@@ -306,14 +291,6 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
     items: [
       { key: 'announcements', label: '公告管理', icon: Bell },
       { key: 'site-cards', label: '首页配置', icon: Picture },
-      { key: 'about', label: '关于页面', icon: InfoFilled },
-    ],
-  },
-  {
-    title: '运营',
-    items: [
-      { key: 'links', label: '链接管理', icon: Link },
-      { key: 'groups', label: '群聊管理', icon: ChatDotRound },
     ],
   },
   {
