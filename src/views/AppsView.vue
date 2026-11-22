@@ -8,6 +8,9 @@
         :prefix-icon="Search"
         size="large"
         maxlength="50"
+        @focus="openDiscover"
+        @blur="closeDiscover"
+        @keyup.esc="closeDiscover"
         @keyup.enter="handleSearch"
       >
         <template #suffix>
@@ -24,6 +27,31 @@
           </el-button>
         </template>
       </el-input>
+
+      <!-- 和华为应用市场一样：点开搜索框、还没输入时，下面列出「发现更多」 -->
+      <div v-if="discoverOpen && !searchQuery.trim()" class="discover-panel" @mousedown.prevent>
+        <div class="discover-title">发现更多</div>
+        <div v-if="discoverLoading" class="discover-state">加载中…</div>
+        <div v-else-if="discoverFailed" class="discover-state">华为应用市场暂时无法访问，请稍后再试</div>
+        <div v-else class="discover-list">
+          <div
+            v-for="app in discoverApps"
+            :key="app.app_id"
+            class="discover-item"
+            @click="openDiscoverApp(app)"
+          >
+            <el-image :src="app.icon_url" class="discover-icon" fit="cover" loading="lazy">
+              <template #error>
+                <div class="discover-icon-placeholder"><el-icon><Picture /></el-icon></div>
+              </template>
+            </el-image>
+            <div class="discover-text">
+              <div class="discover-name">{{ app.name }}</div>
+              <div class="discover-desc">{{ app.brief_desc || app.kind_name }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="apps-container">
@@ -145,6 +173,32 @@ const handleAppClick = (app: AppGalleryListApp) => {
   });
 };
 
+/** 搜索框获得焦点时展开「发现更多」；第一次展开才去拉，失败了下次展开再试 */
+const openDiscover = async () => {
+  discoverOpen.value = true;
+  if (discoverApps.value.length || discoverLoading.value) return;
+  discoverLoading.value = true;
+  discoverFailed.value = false;
+  try {
+    discoverApps.value = await getDiscoverApps();
+  } catch (error) {
+    console.error('Failed to fetch discover apps:', error);
+    discoverFailed.value = true;
+  } finally {
+    discoverLoading.value = false;
+  }
+};
+
+const closeDiscover = () => {
+  discoverOpen.value = false;
+};
+
+const openDiscoverApp = (app: AppGalleryListApp) => {
+  closeDiscover();
+  (document.activeElement as HTMLElement | null)?.blur();
+  handleAppClick(app);
+};
+
 /*
  * route.query 是全局的，离开 /apps 时它也会变、watch 跟着跑一遍取数；
  * 页面在 keep-alive 里没卸载，所以要自己判断在不在本页，跳过的那次切回来由 onActivated 补。
@@ -177,9 +231,101 @@ onActivated(() => {
 }
 
 .search-container {
+  position: relative;
   width: 100%;
   max-width: 800px;
   margin: 10px auto 30px;
+}
+
+.discover-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding: 14px 10px 10px;
+  box-sizing: border-box;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.discover-title {
+  padding: 0 8px 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.discover-state {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.discover-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 2px 8px;
+}
+
+.discover-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.discover-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.discover-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 10px;
+}
+
+.discover-icon-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-placeholder);
+}
+
+.discover-text {
+  min-width: 0;
+}
+
+.discover-name,
+.discover-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discover-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.discover-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .search-input {
