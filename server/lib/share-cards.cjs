@@ -36,8 +36,6 @@ const PAGE_SHARE_META = {
     seoDescription: SITE_DEFAULT_DESCRIPTION
   },
   '/apps': { title: '应用', description: '浏览 OpenStore 全部应用，查找你需要的工具和游戏。' },
-  '/updates': { title: '今日上新', description: '获取最新应用更新和新上架应用信息。' },
-  '/topics': { title: '专题', description: '跟随专题逛鸿蒙生态，发现值得一试的应用。' },
   '/rank/total': { title: '总下载榜', description: '查看 OpenStore 应用总榜，了解最受欢迎的应用。' },
   '/rank/growth': { title: '飙升榜', description: '查看 OpenStore 应用飙升榜，发现潜力应用。' },
   '/app-cards': { title: '应用列表', description: '应用卡片列表。' },

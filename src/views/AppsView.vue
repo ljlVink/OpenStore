@@ -1,5 +1,6 @@
 <template>
   <div class="apps-view">
+    <!-- Top Search Bar -->
     <div class="search-container">
       <el-input
         v-model="searchQuery"
@@ -14,10 +15,10 @@
         @keyup.enter="handleSearch"
       >
         <template #suffix>
-          <el-icon
-            v-if="searchQuery"
-            class="el-input__icon el-input__clear"
-            style="margin-right: 8px; cursor: pointer; color: var(--el-text-color-secondary);"
+          <el-icon 
+            v-if="searchQuery" 
+            class="el-input__icon el-input__clear" 
+            style="margin-right: 8px; cursor: pointer; color: var(--el-text-color-secondary);" 
             @click="searchQuery = ''"
           >
             <CircleClose />
@@ -54,44 +55,141 @@
       </div>
     </div>
 
-    <div class="apps-container">
+    <div v-if="viewMode === 'home'" class="home-content">
+      <!-- Device Tabs (Segmented Control) -->
+      <div class="device-tabs-wrapper">
+        <div class="device-tabs">
+          <div
+            v-if="categoriesLoading"
+            class="device-tabs-progress-bar"
+            :style="{ width: `${skeletonProgress}%` }"
+          ></div>
+          <div 
+            class="tab-glider" 
+            :style="{ 
+              transform: `translateX(${devices.findIndex(d => d.key === activeDevice) * 100}%)`,
+              width: `${100 / devices.length}%`
+            }"
+          ></div>
+          <div 
+            v-for="device in devices" 
+            :key="device.key"
+            class="device-tab"
+            :class="{ active: activeDevice === device.key }"
+            @click="activeDevice = device.key"
+            :style="{ width: `${100 / devices.length}%` }"
+          >
+            <el-icon><component :is="device.icon" v-bind="device.iconProps" /></el-icon>
+            <span class="tab-label">{{ device.label }}</span>
+            <span v-if="deviceStats[device.key]" class="count-badge">{{ deviceStats[device.key] }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Categories Grid -->
+      <div class="categories-grid-wrapper">
+        <div v-if="showHomeSkeleton" class="categories-grid categories-grid-skeleton" aria-hidden="true">
+          <div v-for="i in 12" :key="`category-skeleton-${i}`" class="category-card skeleton-category-card">
+            <el-skeleton animated>
+              <template #template>
+                <div class="category-skeleton-content">
+                  <el-skeleton-item variant="h3" class="category-skeleton-title" />
+                  <div class="category-skeleton-count">
+                    <el-skeleton-item variant="text" class="category-skeleton-number" />
+                    <el-skeleton-item variant="text" class="category-skeleton-unit" />
+                  </div>
+                  <el-skeleton-item variant="circle" class="category-skeleton-icon" />
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
+        </div>
+
+        <transition v-else name="categories-page" mode="out-in">
+          <div :key="categoryPageKey" class="categories-grid categories-page-shell">
+            <div 
+              v-for="(category, index) in categories" 
+              :key="index"
+              class="category-card"
+              :style="{ backgroundColor: category.color }"
+              @click="handleCategoryClick(category)"
+            >
+              <div class="category-text">
+                <div class="category-name">{{ category.name }}</div>
+                <div class="category-count">
+                  <span class="category-count-number">{{ formatCategoryCount(category.count) }}</span>
+                  <span class="category-count-unit">应用</span>
+                </div>
+              </div>
+              <div class="category-icon-bg">
+                <el-icon><component :is="category.icon || Connection" /></el-icon>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </div>
+
+    <!-- Apps Grid (Search/Category) -->
+    <div v-else class="apps-container">
       <div class="view-header">
-        <el-button v-if="keyword" circle @click="handleBack" class="back-btn">
+        <el-button circle @click="handleBack" class="back-btn">
           <el-icon><ArrowLeft /></el-icon>
         </el-button>
         <h2 class="view-title">{{ pageTitle }}</h2>
-        <div v-if="!loading && !failed" class="view-total-badge">共 {{ appList.length }} 个应用</div>
+        <div class="view-total-badge">共 {{ formatCategoryCount(totalCount || appList.length) }} 个应用</div>
       </div>
 
-      <div v-if="loading" class="apps-grid">
-        <div class="app-card skeleton-card" v-for="i in 12" :key="i">
-          <el-skeleton animated>
-            <template #template>
-              <div class="skeleton-content">
-                <el-skeleton-item variant="image" class="skeleton-icon" />
-                <div class="skeleton-info">
-                  <el-skeleton-item variant="h3" style="width: 50%; margin-bottom: 8px;" />
-                  <el-skeleton-item variant="text" style="width: 80%; margin-bottom: 8px;" />
-                  <div class="skeleton-meta">
-                    <el-skeleton-item variant="text" style="width: 40px; height: 16px; margin-right: 8px;" />
-                    <el-skeleton-item variant="text" style="width: 60px; height: 16px;" />
+      <div class="apps-grid-container">
+        <div v-if="loading" class="apps-grid">
+          <div class="app-card skeleton-card" v-for="i in 12" :key="i">
+            <el-skeleton animated>
+              <template #template>
+                <div class="skeleton-content">
+                  <el-skeleton-item variant="image" class="skeleton-icon" />
+                  <div class="skeleton-info">
+                    <el-skeleton-item variant="h3" style="width: 50%; margin-bottom: 8px;" />
+                    <el-skeleton-item variant="text" style="width: 80%; margin-bottom: 8px;" />
+                    <div class="skeleton-meta">
+                      <el-skeleton-item variant="text" style="width: 40px; height: 16px; margin-right: 8px;" />
+                      <el-skeleton-item variant="text" style="width: 60px; height: 16px;" />
+                    </div>
                   </div>
+                  <el-skeleton-item variant="text" style="width: 50px; height: 20px; border-radius: 12px;" />
                 </div>
-              </div>
-            </template>
-          </el-skeleton>
+              </template>
+            </el-skeleton>
+          </div>
+        </div>
+        <el-empty v-else-if="appList.length === 0" description="暂无应用" />
+        <div class="apps-grid" v-else>
+          <AppCard 
+            v-for="(app, index) in appList" 
+            :key="app.app_id || app.id" 
+            :app="app"
+            :rank="(currentPage - 1) * pageSize + index + 1"
+            @click="handleAppClick"
+          />
         </div>
       </div>
-      <el-empty v-else-if="failed" description="华为应用市场暂时无法访问，请稍后再试" />
-      <el-empty v-else-if="appList.length === 0" description="暂无应用" />
-      <div class="apps-grid" v-else>
-        <AppCard
-          v-for="(app, index) in appList"
-          :key="app.app_id"
-          :app="app"
-          :rank="index + 1"
-          @click="handleAppClick"
-        />
+
+      <!-- Pagination（华为搜索一次返回全部结果，不分页） -->
+      <div class="pagination-container" v-if="viewMode !== 'search' && !loading && (appList.length > 0 || currentPage > 1)">
+        <el-button 
+          :disabled="currentPage === 1" 
+          @click="changePage(-1)"
+          circle
+        >
+          <el-icon><ArrowLeft /></el-icon>
+        </el-button>
+        <span class="page-info">{{ currentPage }} / {{ Math.ceil(totalCount / pageSize) || 1 }}</span>
+        <el-button 
+          :disabled="!hasMore" 
+          @click="changePage(1)"
+          circle
+        >
+          <el-icon><ArrowRight /></el-icon>
+        </el-button>
       </div>
     </div>
   </div>
@@ -102,59 +200,361 @@ defineOptions({
   name: 'AppsView'
 });
 
-import { ref, watch, computed, onActivated } from 'vue';
-import { Search, CircleClose, ArrowLeft } from '@element-plus/icons-vue';
+import { ref, watch, computed, onActivated, onBeforeUnmount } from 'vue';
+import { Search, Menu, Connection, CircleClose, ArrowLeft, ArrowRight, Picture } from '@element-plus/icons-vue';
+// 分类图标集中在 utils 里，和「分类增长排行」共用同一份
+import { CATEGORY_ICON_MAP } from '../utils/category-icons';
 import { useRouter, useRoute } from 'vue-router';
-import { getDiscoverApps, searchApps, type AppGalleryListApp } from '../services/next-api';
+import { getCategories, searchApps, getDevices, DEVICE_MAP, getAppsByCategory, getDiscoverApps, type AppGalleryListApp } from '../services/next-api';
 import AppCard from '../components/AppCard.vue';
+import DeviceIcon from '../components/DeviceIcon.vue';
 import { usePageActive } from '../utils/page-active';
 
 const router = useRouter();
 const route = useRoute();
 const pageActive = usePageActive();
 const searchQuery = ref('');
-const appList = ref<AppGalleryListApp[]>([]);
+const activeDevice = ref('all');
+const categories = ref<any[]>([]);
+const appList = ref<any[]>([]);
 const loading = ref(false);
-const failed = ref(false);
-let requestId = 0;
+const categoriesLoading = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(20);
+const totalCount = ref(0);
+const hasMore = ref(false);
+let categoriesRequestId = 0;
+const categoryPageVersion = ref(0);
+const categorySnapshots = new Map<string, any[]>();
+const skeletonProgress = ref(12);
+const discoverOpen = ref(false);
+const discoverApps = ref<AppGalleryListApp[]>([]);
+const discoverLoading = ref(false);
+const discoverFailed = ref(false);
+let skeletonProgressTimer: number | null = null;
+let prewarmStarted = false;
 /** 不在本页时被跳过的 route.query 同步：切回来要补一次 */
 let routeSyncSkipped = false;
 
-/** 当前搜索词（地址栏 ?q=），为空时展示「发现更多」 */
-const keyword = computed(() => (typeof route.query.q === 'string' ? route.query.q.trim() : ''));
+const viewMode = computed(() => {
+  if (route.query.q) return 'search';
+  if (route.query.category) return 'category';
+  return 'home';
+});
 
-const pageTitle = computed(() => (keyword.value ? `"${keyword.value}" 的搜索结果` : '发现更多'));
+const pageTitle = computed(() => {
+  if (viewMode.value === 'search') return `"${route.query.q}" 的搜索结果`;
+  if (viewMode.value === 'category') return route.query.category as string;
+  return '应用分类';
+});
+
+const showHomeSkeleton = computed(() => categoriesLoading.value && categories.value.length === 0);
+const categoryPageKey = computed(() => `${activeDevice.value}-${categoryPageVersion.value}`);
+
+const deviceStats = ref<Record<string, number | string>>({
+  phone: '-',
+  tv: '-',
+  tablet: '-',
+  // 上游设备码 7 = 手表（不是车机）
+  watch: '-',
+  pc: '-'
+});
+
+const devices = [
+  { key: 'all', label: '全部', icon: Menu },
+  { key: 'phone', label: '手机', icon: DeviceIcon, iconProps: { kind: 'phone' } },
+  { key: 'tv', label: '智慧屏', icon: DeviceIcon, iconProps: { kind: 'tv' } },
+  { key: 'tablet', label: '平板', icon: DeviceIcon, iconProps: { kind: 'tablet' } },
+  { key: 'watch', label: '手表', icon: DeviceIcon, iconProps: { kind: 'watch' } },
+  { key: 'pc', label: '电脑', icon: DeviceIcon, iconProps: { kind: 'pc' } }
+];
+
+const DEVICE_KEYS = new Set(devices.map((device) => device.key));
+
+// Colors for categories
+const colors = [
+  '#b91c1c', '#0d9488', '#0891b2', '#15803d', '#d97706', '#7f1d1d', 
+  '#7e22ce', '#0284c7', '#22c55e', '#eab308', '#dc2626', '#059669', 
+  '#9333ea', '#ea580c'
+];
+
+
+const mapCategoryList = (list: any[]) => {
+  return list.map((item: any, index: number) => ({
+    ...item,
+    color: colors[index % colors.length],
+    count: item.count || item.app_count || 0,
+    icon: CATEGORY_ICON_MAP[item.name] || item.icon || 'Connection'
+  }));
+};
+
+const loadCategoriesForDevice = async (deviceKey: string) => {
+  const deviceId = DEVICE_MAP[deviceKey];
+  const res = await getCategories(deviceId);
+
+  let list: any[] = [];
+  if (Array.isArray(res)) {
+    list = res;
+  } else if (res.data && Array.isArray(res.data)) {
+    list = res.data;
+  } else if (res.items && Array.isArray(res.items)) {
+    list = res.items;
+  }
+
+  return mapCategoryList(list);
+};
+
+/**
+ * 找到该分类对应的别名组（后台 overview 里带下来的 aliases）。
+ * 直接打开 /apps?category=xxx 时本地还没有快照，就先拉一次分类表再取。
+ */
+const resolveCategoryAliases = async (name: string, deviceKey: string): Promise<string[]> => {
+  const cached = categorySnapshots.get(deviceKey);
+  const hit = cached?.find((item: any) => item.name === name)?.aliases;
+  if (Array.isArray(hit) && hit.length) return hit;
+
+  try {
+    const list = await loadCategoriesForDevice(deviceKey);
+    categorySnapshots.set(deviceKey, list);
+    const found = list.find((item: any) => item.name === name)?.aliases;
+    return Array.isArray(found) && found.length ? found : [name];
+  } catch {
+    return [name];
+  }
+};
+
+const startSkeletonProgress = () => {
+  if (skeletonProgressTimer) {
+    clearInterval(skeletonProgressTimer);
+  }
+
+  skeletonProgress.value = 12;
+  skeletonProgressTimer = window.setInterval(() => {
+    if (skeletonProgress.value < 78) {
+      skeletonProgress.value += 7;
+    } else if (skeletonProgress.value < 92) {
+      skeletonProgress.value += 1;
+    }
+  }, 180);
+};
+
+const stopSkeletonProgress = () => {
+  if (skeletonProgressTimer) {
+    clearInterval(skeletonProgressTimer);
+    skeletonProgressTimer = null;
+  }
+  skeletonProgress.value = 100;
+  window.setTimeout(() => {
+    if (!showHomeSkeleton.value) {
+      skeletonProgress.value = 12;
+    }
+  }, 180);
+};
+
+const prewarmCategorySnapshots = async () => {
+  if (prewarmStarted) return;
+  prewarmStarted = true;
+
+  const queue = devices
+    .map((device) => device.key)
+    .filter((deviceKey) => !categorySnapshots.has(deviceKey));
+
+  for (const deviceKey of queue) {
+    try {
+      const mappedCategories = await loadCategoriesForDevice(deviceKey);
+      categorySnapshots.set(deviceKey, mappedCategories);
+    } catch (error) {
+      console.warn(`Failed to prewarm categories for ${deviceKey}`, error);
+    }
+  }
+};
+
+const fetchDeviceStats = async () => {
+  try {
+    const res = await getDevices();
+    let list: any[] = [];
+    if (Array.isArray(res)) list = res;
+    else if (res.data && Array.isArray(res.data)) list = res.data;
+    else if (res.items && Array.isArray(res.items)) list = res.items;
+
+    // Map API response to our local stats
+    // Assuming list items have { id, count } or similar
+    // We reverse map ID to key
+    const idToKey: Record<number, string> = {};
+    Object.entries(DEVICE_MAP).forEach(([key, val]) => {
+      if (val !== undefined) idToKey[val] = key;
+    });
+
+    list.forEach((item: any) => {
+       const key = idToKey[item.id || item.device_id || item.code];
+       if (key) {
+         // Format count (e.g. 1200 -> 1.2k)
+         let count = item.count || item.app_count || 0;
+         if (count > 10000) count = (count / 10000).toFixed(1) + 'w';
+         else if (count > 1000) count = (count / 1000).toFixed(1) + 'k';
+         deviceStats.value[key] = count;
+       }
+     });
+  } catch (e) {
+    console.error('Failed to fetch device stats', e);
+  }
+};
+
+const fetchCategories = async () => {
+  const requestId = ++categoriesRequestId;
+  const deviceKey = activeDevice.value;
+  const cachedCategories = categorySnapshots.get(deviceKey);
+
+  if (cachedCategories) {
+    categories.value = cachedCategories;
+  } else {
+    categories.value = [];
+  }
+
+  categoriesLoading.value = true;
+  try {
+    const mappedCategories = await loadCategoriesForDevice(deviceKey);
+
+    if (requestId === categoriesRequestId) {
+      /*
+       * 只有分类内容真的变了才换 key（换 key 会播一次翻页动画）。
+       * 之前每次进页面都重新拉一遍、无脑换 key，于是每次进来分类区都自己「翻」一下，
+       * 看着很怪；内容一样时就地更新，不播动画。
+       */
+      const previous = categorySnapshots.get(deviceKey) || [];
+      const changed =
+        previous.length !== mappedCategories.length ||
+        previous.some((item, index) => {
+          const next = mappedCategories[index];
+          return (
+            !next ||
+            item?.name !== next.name ||
+            item?.count !== next.count ||
+            item?.color !== next.color
+          );
+        });
+
+      categorySnapshots.set(deviceKey, mappedCategories);
+      categories.value = mappedCategories;
+      if (changed) categoryPageVersion.value += 1;
+      void prewarmCategorySnapshots();
+    }
+  } catch (error) {
+    console.error('Failed to fetch categories:', error);
+  } finally {
+    if (requestId === categoriesRequestId) {
+      categoriesLoading.value = false;
+    }
+  }
+};
+
+const formatCategoryCount = (count: unknown) => {
+  const n = typeof count === 'number' ? count : Number(count);
+  if (!Number.isFinite(n)) return String(count ?? '-');
+  try {
+    return new Intl.NumberFormat('zh-CN').format(n);
+  } catch {
+    return String(n);
+  }
+};
 
 const fetchApps = async () => {
-  const current = ++requestId;
-  const q = keyword.value;
-  searchQuery.value = q;
   loading.value = true;
-  failed.value = false;
-  appList.value = [];
+  // appList.value = []; // Don't clear immediately to avoid flash if possible, or clear if desired. 
+  // Clearing gives better feedback that new data is loading.
+  if (currentPage.value === 1) {
+    appList.value = [];
+    totalCount.value = 0;
+  }
+  
   try {
-    const list = q ? await searchApps(q) : await getDiscoverApps();
-    if (current === requestId) appList.value = list;
+    let res: any;
+    if (viewMode.value === 'search') {
+      const q = route.query.q as string;
+      if (q) {
+        searchQuery.value = q; // Sync input
+        const list = await searchApps(q);
+        res = { data: list, total: list.length };
+      }
+    } else if (viewMode.value === 'category') {
+      const cat = route.query.category as string;
+      const deviceKey = route.query.device as string | undefined;
+      const deviceId = deviceKey && DEVICE_KEYS.has(deviceKey) ? DEVICE_MAP[deviceKey] : undefined;
+      if (cat) {
+        // 分类卡片上的数量是整个别名组的合计，这里要用同一组别名查，数字才对得上
+        const aliases = await resolveCategoryAliases(cat, deviceKey && DEVICE_KEYS.has(deviceKey) ? deviceKey : 'all');
+        res = await getAppsByCategory(cat, currentPage.value, pageSize.value, deviceId, aliases);
+      }
+    }
+
+    if (res) {
+      let list = [];
+      if (Array.isArray(res)) {
+        list = res;
+      } else if (res.data && Array.isArray(res.data)) {
+        list = res.data;
+      }
+      if (typeof res.total === 'number') {
+        totalCount.value = res.total;
+      }
+      appList.value = list;
+      
+      if (totalCount.value > 0) {
+        hasMore.value = currentPage.value * pageSize.value < totalCount.value;
+      } else {
+        // Fallback Heuristic
+        hasMore.value = list.length >= pageSize.value;
+      }
+    } else {
+      appList.value = [];
+      hasMore.value = false;
+    }
   } catch (error) {
     console.error('Failed to fetch apps:', error);
-    if (current === requestId) failed.value = true;
+    appList.value = [];
+    hasMore.value = false;
   } finally {
-    if (current === requestId) loading.value = false;
+    loading.value = false;
+  }
+};
+
+const changePage = (delta: number) => {
+  const newPage = currentPage.value + delta;
+  if (newPage < 1) return;
+  currentPage.value = newPage;
+  fetchApps();
+  // Scroll to top of grid
+  const grid = document.querySelector('.apps-grid');
+  if (grid) {
+    grid.scrollIntoView({ behavior: 'smooth' });
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 };
 
 const handleSearch = () => {
-  const q = searchQuery.value.trim();
-  if (!q) return;
-  router.push({ query: { q } });
+  if (!searchQuery.value) return;
+  router.push({ query: { ...route.query, q: searchQuery.value } });
+};
+
+const handleCategoryClick = (category: any) => {
+  router.push({
+    query: {
+      category: category.name,
+      ...(activeDevice.value !== 'all' ? { device: activeDevice.value } : {})
+    }
+  });
 };
 
 const handleBack = () => {
   searchQuery.value = '';
 
   /*
-   * 从站内别处带着搜索词进来时，返回应该回到来的那个页面；
-   * 应用页内部搜索产生的 /apps?q=... 历史则一步回到「发现更多」，
+   * 从站内别处点进某个分类（应用详情里的分类等）时，
+   * 顶部返回应该回到来的那个页面，而不是一律回分类首页。
+   *
+   * 只有「来路不是应用页自己」才走 history 后退：应用页里换分类 / 搜索会产生
+   * 一串 /apps?... 历史，那种情况下还是按原样一步回到分类首页，
    * 免得返回按钮变成"一步步退回刚才搜过的词"。
    */
   const from = (window.history.state as { back?: string | null } | null)?.back || '';
@@ -162,13 +562,18 @@ const handleBack = () => {
     router.back();
     return;
   }
-  router.push({ query: {} });
+
+  // 应用页内部进来的：回到分类首页，保留当前设备（否则会掉回「全部」）
+  router.push({ query: activeDevice.value === 'all' ? {} : { device: activeDevice.value } });
 };
 
-const handleAppClick = (app: AppGalleryListApp) => {
-  router.push({
-    name: 'next-app-detail',
-    params: { id: app.app_id },
+const handleAppClick = async (app: any) => {
+  const appId = app.app_id || app.id;
+  if (!appId) return;
+
+  router.push({ 
+    name: 'next-app-detail', 
+    params: { id: appId },
     query: { title: app.name }
   });
 };
@@ -203,24 +608,74 @@ const openDiscoverApp = (app: AppGalleryListApp) => {
  * route.query 是全局的，离开 /apps 时它也会变、watch 跟着跑一遍取数；
  * 页面在 keep-alive 里没卸载，所以要自己判断在不在本页，跳过的那次切回来由 onActivated 补。
  */
+const syncFromRoute = () => {
+  routeSyncSkipped = false;
+  const routeDevice = route.query.device;
+  if (typeof routeDevice === 'string' && DEVICE_KEYS.has(routeDevice)) {
+    activeDevice.value = routeDevice;
+  } else if (viewMode.value === 'home') {
+    activeDevice.value = 'all';
+  }
+
+  if (viewMode.value === 'home') {
+    fetchCategories();
+    fetchDeviceStats();
+  } else {
+    currentPage.value = 1;
+    fetchApps();
+  }
+};
+
 watch(
-  keyword,
+  () => route.query,
   () => {
     if (!pageActive.value) {
       routeSyncSkipped = true;
       return;
     }
-    routeSyncSkipped = false;
-    fetchApps();
+    syncFromRoute();
   },
   { immediate: true }
 );
 
 onActivated(() => {
   if (!routeSyncSkipped) return;
-  routeSyncSkipped = false;
-  fetchApps();
+  syncFromRoute();
 });
+
+watch(activeDevice, (key) => {
+  if (viewMode.value === 'home') {
+    fetchCategories();
+  }
+
+  /*
+   * 把当前设备写进地址栏（?device=xxx）：
+   * 之前只在组件内存里记着，点进应用详情再返回 / 刷新页面 / 复制链接时都会掉回「全部」。
+   * 这里用 replace 不进历史，避免每切一次设备多一条后退记录。
+   */
+  if (viewMode.value !== 'home') return;
+  const nextDevice = key === 'all' ? '' : String(key);
+  if (String(route.query.device || '') === nextDevice) return;
+  const nextQuery: Record<string, any> = { ...route.query };
+  if (nextDevice) nextQuery.device = nextDevice;
+  else delete nextQuery.device;
+  router.replace({ query: nextQuery });
+});
+
+watch(showHomeSkeleton, (visible) => {
+  if (visible) {
+    startSkeletonProgress();
+  } else {
+    stopSkeletonProgress();
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (skeletonProgressTimer) {
+    clearInterval(skeletonProgressTimer);
+  }
+});
+
 </script>
 
 <style scoped>
@@ -337,32 +792,34 @@ onActivated(() => {
 .search-input :deep(.el-input__wrapper) {
   border-radius: 50px;
   background-color: var(--el-bg-color);
-  box-shadow: none;
-  border: 1px solid var(--el-border-color);
+  box-shadow: none; /* Removed shadow */
+  border: 1px solid var(--el-border-color); /* Added border instead */
   padding-left: 20px;
-  padding-right: 10px;
+  padding-right: 10px; /* Adjust for suffix */
   transition: all 0.3s ease;
   z-index: 1;
 }
 
 .search-input :deep(.el-input__wrapper.is-focus) {
-  box-shadow: none;
+  box-shadow: none; /* Removed glow */
   border-color: var(--el-color-primary);
   z-index: 2;
 }
 
+/* Removed append slot styles */
+
 .search-btn {
   background-color: transparent;
   border-radius: 50px;
-  height: 32px;
+  height: 32px; /* Fit inside input */
   padding: 0 16px;
-  color: var(--el-text-color-primary);
+  color: var(--el-text-color-primary); 
   font-weight: 600;
   font-size: 14px;
   border: none;
   box-shadow: none;
   transition: all 0.3s;
-  margin-left: 5px;
+  margin-left: 5px; 
 }
 
 .search-btn:hover {
@@ -373,6 +830,213 @@ onActivated(() => {
 .search-btn:active {
   background-color: var(--el-fill-color-darker);
   transform: translateY(0);
+}
+
+.device-tabs-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.device-tabs {
+  display: flex;
+  position: relative;
+  background-color: var(--el-fill-color);
+  border-radius: 50px;
+  border: 4px solid var(--el-fill-color);
+  padding: 0;
+  width: 100%;
+  max-width: 800px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+  box-sizing: border-box;
+}
+
+.home-content {
+  position: relative;
+}
+
+.categories-grid-wrapper {
+  position: relative;
+}
+
+.categories-page-shell {
+  width: 100%;
+}
+
+.categories-grid-skeleton {
+  pointer-events: none;
+}
+
+.categories-grid-skeleton .category-card {
+  min-height: 72px;
+}
+
+.skeleton-category-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  cursor: default;
+  background: var(--el-bg-color);
+}
+
+.device-tabs-progress-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(64, 158, 255, 0.1) 0%, rgba(64, 158, 255, 0.2) 100%);
+  transition: width 0.2s linear;
+  pointer-events: none;
+}
+
+.category-skeleton-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 72px;
+}
+
+.category-skeleton-title {
+  width: 44%;
+  height: 22px;
+  margin-bottom: 14px;
+}
+
+.category-skeleton-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.category-skeleton-number {
+  width: 68px;
+  height: 24px;
+}
+
+.category-skeleton-unit {
+  width: 32px;
+  height: 16px;
+}
+
+.category-skeleton-icon {
+  width: 42px;
+  height: 42px;
+  margin-top: 18px;
+  align-self: flex-end;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.categories-page-enter-active,
+.categories-page-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease, filter 0.28s ease;
+}
+
+.categories-page-enter-from {
+  opacity: 0;
+  transform: translateX(28px) rotateY(-10deg);
+  filter: blur(2px);
+}
+
+.categories-page-leave-to {
+  opacity: 0;
+  transform: translateX(-28px) rotateY(10deg);
+  filter: blur(2px);
+}
+
+.tab-glider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background-color: var(--el-bg-color);
+  border-radius: 50px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 1;
+}
+
+.device-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: color 0.3s;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+  position: relative;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.device-tab:hover {
+  color: var(--el-text-color-primary);
+}
+
+.device-tab.active {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.tab-label {
+  display: inline-block;
+}
+
+.count-badge {
+  font-size: 10px;
+  background-color: var(--el-fill-color-darker);
+  color: var(--el-text-color-secondary);
+  padding: 0 4px;
+  border-radius: 10px;
+  line-height: 14px;
+  height: 14px;
+  min-width: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+  transition: all 0.3s;
+}
+
+.device-tab.active .count-badge {
+  background-color: var(--el-color-primary);
+  color: white;
+}
+
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.category-card {
+  min-height: 72px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: white;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
 }
 
 .view-header {
@@ -392,7 +1056,7 @@ onActivated(() => {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  height: 32px;
+  height: 32px; /* Explicit height to match button */
   line-height: 32px;
   text-align: center;
   white-space: nowrap;
@@ -451,16 +1115,148 @@ onActivated(() => {
 
 .apps-grid {
   display: grid;
-  /* 列数完全由容器宽度决定：卡片最小 240px，放不下就自动减列，够宽就自动加列。
-     min(100%, 240px) 避免容器比 240px 还窄时溢出。 */
+  /* 列数完全由容器宽度决定：卡片最小 280px，放不下就自动减列，够宽就自动加列。
+     min(100%, 280px) 避免容器比 280px 还窄时溢出。 */
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   column-gap: 16px;
   row-gap: 16px;
+  padding-bottom: 24px;
+}
+
+/*
+ * 这里以前写死过 min-height（810px / 680px / 520px），本意是让页码条在翻页时别跳。
+ * 但卡片行高 90px、行距 16px、每页 20 个：4 列满页才 540px，3 列 753px，2 列 1072px——
+ * 三个常数和实际布局全都对不上，4 列时满页都会白空 270px，不满页更夸张。
+ * 与其留一大片空白换页码条不动，不如让页码条贴着内容走。
+ */
+.apps-grid-container {
+  min-height: 0;
+}
+
+.category-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.22);
+}
+
+.category-text {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.category-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-count {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+.category-count-number {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-icon-bg {
+  /* 水印图标绝对定位在右侧，不占文字宽度，窄卡片上名称才不会被截断 */
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  font-size: 46px;
+  opacity: 0.22;
+  transform: translateY(-50%) rotate(-10deg);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Dark mode adjustments */
+.dark .search-input :deep(.el-input__wrapper) {
+  background-color: var(--el-bg-color-overlay);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .device-tab .el-icon,
+  .device-tab .count-badge {
+    display: none;
+  }
+  
+  .device-tab {
+    padding: 8px 2px;
+    font-size: 13px;
+  }
+
+  .categories-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .category-card {
+    padding: 10px 12px;
+    min-height: 64px;
+    gap: 4px;
+  }
+
+  .category-name {
+    font-size: 14px;
+  }
+
+  .category-count {
+    margin-top: 2px;
+    font-size: 11px;
+  }
+
+  .category-count-number {
+    font-size: 12px;
+  }
+
+  .category-icon-bg {
+    font-size: 36px;
+    right: 4px;
+  }
+
+  .view-header {
+    gap: 6px;
+  }
+
+  .view-title {
+    font-size: 18px;
+    max-width: calc(100% - 150px);
+  }
+
+  .view-total-badge {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 30px;
+  }
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
   padding-bottom: 40px;
 }
 
-.dark .search-input :deep(.el-input__wrapper) {
-  background-color: var(--el-bg-color-overlay);
+.page-info {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
 
 /* Skeleton Loader */
@@ -499,6 +1295,19 @@ onActivated(() => {
 }
 
 @media (min-width: 1280px) {
+  .categories-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+
+  .category-card,
+  .categories-grid-skeleton .category-card {
+    min-height: 80px;
+  }
+
+  .category-skeleton-content {
+    min-height: 80px;
+  }
+
   .skeleton-card {
     padding: 14px;
   }
@@ -510,20 +1319,34 @@ onActivated(() => {
 }
 
 @media (max-width: 768px) {
-  .view-header {
-    gap: 6px;
+  .categories-grid-skeleton .category-card {
+    min-height: 64px;
   }
 
-  .view-title {
-    font-size: 18px;
-    max-width: calc(100% - 150px);
+  .category-skeleton-content {
+    min-height: 64px;
   }
 
-  .view-total-badge {
-    height: 30px;
-    padding: 0 12px;
-    font-size: 12px;
-    line-height: 30px;
+  .category-skeleton-title {
+    width: 54%;
+    height: 18px;
+    margin-bottom: 10px;
+  }
+
+  .category-skeleton-number {
+    width: 54px;
+    height: 18px;
+  }
+
+  .category-skeleton-unit {
+    width: 24px;
+    height: 14px;
+  }
+
+  .category-skeleton-icon {
+    width: 34px;
+    height: 34px;
+    margin-top: 12px;
   }
 
   .skeleton-card {
@@ -561,6 +1384,36 @@ onActivated(() => {
     padding: 0 10px;
     font-size: 11px;
     line-height: 28px;
+  }
+
+  .categories-grid-skeleton .category-card {
+    min-height: 60px;
+  }
+
+  .category-skeleton-content {
+    min-height: 60px;
+  }
+
+  .category-skeleton-title {
+    width: 58%;
+    height: 16px;
+    margin-bottom: 8px;
+  }
+
+  .category-skeleton-number {
+    width: 46px;
+    height: 16px;
+  }
+
+  .category-skeleton-unit {
+    width: 20px;
+    height: 12px;
+  }
+
+  .category-skeleton-icon {
+    width: 28px;
+    height: 28px;
+    margin-top: 10px;
   }
 
   .skeleton-card {

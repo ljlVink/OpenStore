@@ -22,12 +22,6 @@ describe('详情页 canonical 目标路径', () => {
     expect(canonicalPathFor(`/app/${APP}`, APP)).toBe(`/apps/${APP}`);
   });
 
-  it('更新详情指向自身（内容与应用详情不同，不能合并）', () => {
-    expect(canonicalPathFor(`/updates/app/${APP}`, APP)).toBe(`/updates/app/${APP}`);
-    // 即使调用方把同一个 ID 当作 appId 传进来，也不能改写成 /apps/<id>
-    expect(canonicalPathFor('/updates/app/other-id', APP)).toBe('/updates/app/other-id');
-  });
-
   it('专题指向自身', () => {
     const topic = '010edcf1e2f34f0a825a0cdb6065b52a';
     expect(canonicalPathFor(`/topics/${topic}`, topic)).toBe(`/topics/${topic}`);

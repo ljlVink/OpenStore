@@ -156,25 +156,14 @@ const pages = ref<PageProbe[]>([
     key: 'home',
     name: '探索',
     route: '/',
-    probePath: '/api/public/site-cards?page=home',
+    // 探索页的内容就是华为探索页的专题
+    probePath: '/api/public/explore',
   }),
   createProbe<PageProbe>({
     key: 'apps',
     name: '应用',
     route: '/apps',
-    probePath: '/api/public/apps/discover',
-  }),
-  createProbe<PageProbe>({
-    key: 'topics',
-    name: '专题',
-    route: '/topics',
-    probePath: '/api/public/topics',
-  }),
-  createProbe<PageProbe>({
-    key: 'updates',
-    name: '更新',
-    route: '/updates',
-    probePath: '/api/v0/apps/list/1?page_size=1&detail=false',
+    probePath: '/api/public/apps/overview',
   }),
   createProbe<PageProbe>({
     key: 'about',

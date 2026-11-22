@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { translateAppsListCall } from './upstream-compat';
 
 // Use same-origin relative base URL; Nginx/BT 反向代理到后端
 const API_URL = '/api';
@@ -10,17 +9,6 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-/**
- * 应用列表请求：上游 /v0/apps/list 被风控后会返回 404，
- * 这里统一翻译成等价的 /v0/apps/query（POST），参数与返回结构保持不变。
- */
-const fetchAppList = (page: number, params: Record<string, any>) => {
-  const translated = translateAppsListCall(`/apps/list/${page}`, params);
-  return translated
-    ? apiClient.post(`/v0${translated.path}`, translated.body)
-    : apiClient.get(`/v0/apps/list/${page}`, { params });
-};
 
 // Intercept requests to add token
 apiClient.interceptors.request.use((config) => {
@@ -127,117 +115,6 @@ export const getVisitors = async (): Promise<Visitor[]> => {
   } catch (error) {
     console.error('Failed to fetch visitors', error);
     return [];
-  }
-};
-
-export const getNewApps = async (page = 1, pageSize = 20) => {
-  try {
-    const params = {
-      sort: 'listed_at',
-      desc: true,
-      page_size: pageSize,
-      // 上新列表要显示版本号/下载量/分类/时间徽标，必须取完整信息
-      detail: true
-    };
-    const response = await fetchAppList(page, params);
-    
-    let list: any[] = [];
-    const responseData = response.data || response;
-
-    if (Array.isArray(responseData)) {
-      list = responseData;
-    } else if (responseData && Array.isArray(responseData.data)) {
-      list = responseData.data;
-    } else if (responseData && responseData.data && Array.isArray(responseData.data.data)) {
-      list = responseData.data.data;
-    } else if (responseData && responseData.apps && Array.isArray(responseData.apps)) {
-      list = responseData.apps;
-    }
-
-    list = list.map((item: any) => item.info || item);
-    
-    return {
-      data: list,
-      total: responseData.total || 0
-    };
-  } catch (error) {
-    console.error('Failed to fetch new apps', error);
-    throw error;
-  }
-};
-
-export const getNewAppsByDateRange = async (dateFrom: string | undefined, dateTo: string | undefined, page = 1, pageSize = 20) => {
-  try {
-    const params: any = {
-      sort: 'listed_at',
-      desc: true,
-      page_size: pageSize,
-      // 目前只有首页「精选专题」的本周上新海报用，只取图标，简略信息足够
-      detail: false
-    };
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
-
-    const response = await fetchAppList(page, params);
-
-    let list: any[] = [];
-    const responseData = response.data || response;
-
-    if (Array.isArray(responseData)) {
-      list = responseData;
-    } else if (responseData && Array.isArray(responseData.data)) {
-      list = responseData.data;
-    } else if (responseData && responseData.data && Array.isArray(responseData.data.data)) {
-      list = responseData.data.data;
-    } else if (responseData && responseData.apps && Array.isArray(responseData.apps)) {
-      list = responseData.apps;
-    }
-
-    list = list.map((item: any) => item.info || item);
-
-    return {
-      data: list,
-      total: responseData.total || 0
-    };
-  } catch (error) {
-    console.error('Failed to fetch new apps by date range', error);
-    throw error;
-  }
-};
-
-export const getAppUpdates = async (page = 1, pageSize = 50) => {
-  try {
-    const params = {
-      sort: 'release_date',
-      desc: true,
-      page_size: pageSize,
-      // 更新列表同样要显示版本号/下载量/时间徽标
-      detail: true
-    };
-    const response = await fetchAppList(page, params);
-    
-    let list: any[] = [];
-    const responseData = response.data || response;
-
-    if (Array.isArray(responseData)) {
-      list = responseData;
-    } else if (responseData && Array.isArray(responseData.data)) {
-      list = responseData.data;
-    } else if (responseData && responseData.data && Array.isArray(responseData.data.data)) {
-      list = responseData.data.data;
-    } else if (responseData && responseData.apps && Array.isArray(responseData.apps)) {
-      list = responseData.apps;
-    }
-
-    list = list.map((item: any) => item.info || item);
-    
-    return {
-      data: list,
-      total: responseData.total || 0 // Assuming total might be there
-    };
-  } catch (error) {
-    console.error('Failed to fetch app updates', error);
-    throw error;
   }
 };
 
@@ -412,15 +289,7 @@ export const uploadFile = async (file: File): Promise<{ url: string }> => {
 };
 
 
-// Topics (Substances)：华为应用市场「探索」页当前展示的专题
-export interface ShortSubstanceInfo {
-  substance_id: string;
-  title: string;
-  subtitle: string;
-  /** 华为给专题打的栏目名，如「编辑精选」「指南」 */
-  label: string;
-}
-
+// 专题（Substance）：华为应用市场「探索」页
 export interface ShortAppInfo {
   app_id: string;
   name: string;
@@ -428,14 +297,44 @@ export interface ShortAppInfo {
   icon_url: string;
 }
 
-export interface FullSubstanceInfo extends Pick<ShortSubstanceInfo, 'substance_id' | 'title' | 'subtitle'> {
+export interface FullSubstanceInfo {
+  substance_id: string;
+  title: string;
+  subtitle: string;
   description: string;
   apps: ShortAppInfo[];
 }
 
-export const getTopics = async (): Promise<ShortSubstanceInfo[]> => {
-  const { data } = await apiClient.get<{ items: ShortSubstanceInfo[] }>('/public/topics');
-  return data.items;
+export interface ExploreApp {
+  app_id: string;
+  name: string;
+  icon_url: string;
+  brief_desc: string;
+}
+
+/** story 大图卡、list 应用榜单、icons 图标墙；substance_id 为空时卡片不能点进专题 */
+export interface ExploreCard {
+  kind: 'story' | 'list' | 'icons';
+  substance_id: string;
+  /** 华为给专题打的栏目名，如「编辑精选」「推荐」 */
+  label: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  /** 大图卡底部信息栏的颜色（#rrggbb），没有时为空 */
+  color: string;
+  apps: ExploreApp[];
+}
+
+/** 探索页的一个栏目；title 为空的栏目不显示标题 */
+export interface ExploreSection {
+  title: string;
+  cards: ExploreCard[];
+}
+
+export const getExplore = async (): Promise<ExploreSection[]> => {
+  const { data } = await apiClient.get<{ sections: ExploreSection[] }>('/public/explore');
+  return data.sections;
 };
 
 export const getTopicDetail = async (substanceId: string): Promise<FullSubstanceInfo> => {

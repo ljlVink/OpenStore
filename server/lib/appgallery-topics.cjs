@@ -12,12 +12,22 @@ const MAX_IN_FLIGHT = 16;
 const cache = new Map();
 const inFlight = new Map();
 
-// The 探索 tab curates different topics per device; phone order wins, tablet adds its extras.
-const LIST_DEVICES = ['phone', 'tablet'];
-const LIST_TTL_MS = 10 * 60 * 1000;
+// 探索页按平板版取：和应用市场平板首页的栏目、卡片一一对应
+const EXPLORE_DEVICE = 'tablet';
+const EXPLORE_TTL_MS = 10 * 60 * 1000;
 const TOPIC_DETAIL_ID = /^substancedetail\|([a-z0-9_-]{1,96})(?:\?|$)/i;
-let topicList = null;
-let topicListRequest = null;
+// 列表卡没有 detailId，专题 id 只在分享链接里（.../substance/detail?id=xxx）
+const TOPIC_SHARE_ID = /[?&]id=([a-z0-9_-]{1,96})(?:&|$)/i;
+// 华为卡片类型 -> 前端展示形态：story 大图卡、list 应用榜单、icons 图标墙
+const EXPLORE_CARD_KINDS = {
+  'subjectappbigcard.extenal': 'story',
+  scenariolistcard: 'story',
+  'whiteverticalslidercard.recomend': 'list',
+  'appiconrollingcard.extenal': 'icons'
+};
+const EXPLORE_APP_LIMIT = { story: 4, list: 5, icons: 12 };
+let explore = null;
+let exploreRequest = null;
 
 function addApp(apps, row) {
   const id = text(row?.appId);
@@ -88,22 +98,53 @@ async function loadTopic(id) {
   };
 }
 
-function collectTopics(node, topics) {
-  if (Array.isArray(node)) {
-    for (const item of node) collectTopics(item, topics);
-    return;
+const topicIdOf = (item) =>
+  TOPIC_DETAIL_ID.exec(text(item?.detailId))?.[1] || TOPIC_SHARE_ID.exec(text(item?.shareInfo?.shareUrl))?.[1] || '';
+
+function exploreApps(item, limit) {
+  const apps = new Map();
+  for (const row of [...array(item?.refsList_app_short), ...array(item?.refsList_app)]) {
+    const id = text(row?.appId);
+    const icon = text(row?.icon);
+    if (!/^C\d+$/.test(id) || apps.has(id) || !/^https:\/\//i.test(icon)) continue;
+    apps.set(id, { app_id: id, name: text(row.name), icon_url: icon, brief_desc: text(row.memo) });
+    if (apps.size >= limit) break;
   }
-  if (!node || typeof node !== 'object') return;
-  const id = TOPIC_DETAIL_ID.exec(text(node.detailId))?.[1];
-  const title = text(node.title);
-  if (id && title && !topics.has(id)) {
-    topics.set(id, { substance_id: id, title, subtitle: text(node.subTitle), label: text(node.name) });
-  }
-  for (const value of Object.values(node)) collectTopics(value, topics);
+  return Array.from(apps.values());
 }
 
-async function loadExploreTopics(device, signal) {
-  const call = (method, params) => callClient(method, params, { device, signal });
+/** 探索页的一个栏目（「排行与佳作」等；无标题的栏目 title 为空）；seen 用来跨页去重 */
+function parseExploreGroup(group, seen) {
+  const cards = [];
+  for (const card of array(group?.data?.[0]?.layoutData)) {
+    const kind = EXPLORE_CARD_KINDS[cardKind(card)];
+    if (!kind) continue;
+    for (const item of array(card.data?.[0]?.list)) {
+      const title = text(item?.title);
+      const substanceId = topicIdOf(item);
+      const key = substanceId || `${kind}:${title}`;
+      if (!title || seen.has(key)) continue;
+      seen.add(key);
+      const image = text(item.imgUrl);
+      const color = text(item.informationBarColor);
+      cards.push({
+        kind,
+        substance_id: substanceId,
+        label: text(item.name),
+        title,
+        subtitle: text(item.subTitle),
+        image: kind === 'story' && /^https:\/\//i.test(image) ? image : '',
+        color: /^#[0-9a-f]{6}$/i.test(color) ? color : '',
+        apps: exploreApps(item, EXPLORE_APP_LIMIT[kind])
+      });
+    }
+  }
+  return { title: text(group?.title), cards };
+}
+
+async function loadExplore() {
+  const signal = AbortSignal.timeout(20_000);
+  const call = (method, params) => callClient(method, params, { device: EXPLORE_DEVICE, signal });
 
   const home = await call('client.getPageDetail', { pageId: 'HomePage', pageNum: 1, pageSize: 40 });
   // The default tab is 探索; tablet tabs carry no tabName, so follow the store's own selection.
@@ -115,8 +156,15 @@ async function loadExploreTopics(device, signal) {
   let cardList = array(page.pages).find((item) => item?.data?.cardlist)?.data.cardlist;
   if (!Array.isArray(cardList?.layoutData)) throw new Error('AppGallery returned an invalid explore page');
 
-  const topics = new Map();
-  collectTopics(cardList.layoutData, topics);
+  const sections = [];
+  const seen = new Set();
+  const addGroups = (groups) => {
+    for (const group of groups) {
+      const section = parseExploreGroup(group, seen);
+      if (section.cards.length) sections.push(section);
+    }
+  };
+  addGroups(cardList.layoutData);
   let cookies = array(page.setCookie);
   const dataId = text(cardList.dataId);
   for (let pageNum = 2; Number(cardList.hasMore) > 0; pageNum++) {
@@ -125,32 +173,23 @@ async function loadExploreTopics(device, signal) {
     const cookie = cookies.map((value) => text(value).split(';')[0]).filter(Boolean).join('; ');
     cardList = await call('client.getCardList', { dataId, pageNum, pageSize: 40, cookie });
     if (!Array.isArray(cardList.layoutData)) throw new Error('AppGallery returned an invalid explore card page');
-    collectTopics(cardList.layoutData, topics);
+    addGroups(cardList.layoutData);
     if (Array.isArray(cardList.setCookie)) cookies = cardList.setCookie;
   }
-  return topics;
+  if (!sections.length) throw new Error('AppGallery explore page lists no topics');
+  return sections;
 }
 
-async function loadTopicList() {
-  const signal = AbortSignal.timeout(20_000);
-  const lists = await Promise.all(LIST_DEVICES.map((device) => loadExploreTopics(device, signal)));
-  const topics = new Map();
-  for (const list of lists) {
-    for (const [id, topic] of list) if (!topics.has(id)) topics.set(id, topic);
-  }
-  if (!topics.size) throw new Error('AppGallery explore page lists no topics');
-  return Array.from(topics.values());
-}
-
-async function getAppGalleryTopics() {
-  if (topicList?.expiresAt > Date.now()) return topicList.topics;
-  topicListRequest ||= loadTopicList().then((topics) => {
-    topicList = { topics, expiresAt: Date.now() + LIST_TTL_MS };
-    return topics;
+/** 华为应用市场「探索」页：按栏目分组的专题卡片 */
+async function getAppGalleryExplore() {
+  if (explore?.expiresAt > Date.now()) return explore.sections;
+  exploreRequest ||= loadExplore().then((sections) => {
+    explore = { sections, expiresAt: Date.now() + EXPLORE_TTL_MS };
+    return sections;
   }).finally(() => {
-    topicListRequest = null;
+    exploreRequest = null;
   });
-  return topicListRequest;
+  return exploreRequest;
 }
 
 async function getAppGalleryTopic(id) {
@@ -170,4 +209,4 @@ async function getAppGalleryTopic(id) {
   return request;
 }
 
-module.exports = { getAppGalleryTopic, getAppGalleryTopics };
+module.exports = { getAppGalleryTopic, getAppGalleryExplore };

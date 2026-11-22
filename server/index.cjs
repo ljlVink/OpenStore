@@ -231,7 +231,7 @@ app.use(async (req, res, next) => {
   if (path.extname(rawPath)) return next();
 
   const cleanPath = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : '/';
-  const appMatch = /^\/(?:apps|updates\/app)\/([^/]+)$/.exec(cleanPath);
+  const appMatch = /^\/apps\/([^/]+)$/.exec(cleanPath);
   // 旧版应用卡片路由 /app/:id，内容与应用详情页同源
   const appCardMatch = /^\/app\/([^/]+)$/.exec(cleanPath);
   const topicMatch = /^\/topics\/([^/]+)$/.exec(cleanPath);
@@ -286,7 +286,7 @@ app.use(async (req, res, next) => {
   /*
    * canonical：同一个应用有多个等价入口（/apps/X、/dashboard?app_id=X、/app/X），
    * 且常带 ?title= 这类展示参数，不声明权威地址会被当成重复内容。
-   * 这三者统一指向 sitemap 使用的 /apps/<id>；/updates/app/X 是更新记录，指向自身。
+   * 这三者统一指向 sitemap 使用的 /apps/<id>。
    */
   const canonicalUrl = `${SITE_ORIGIN}${canonicalPathFor(cleanPath, appId)}`;
   // 结构化数据：用上游原始信息补上「这是什么、谁做的、评分多少」

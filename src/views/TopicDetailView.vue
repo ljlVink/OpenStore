@@ -13,7 +13,7 @@
     >
       <template #extra>
         <el-button type="primary" @click="fetchDetail">重试</el-button>
-        <el-button @click="goBackOrHome(router, '/topics')">返回</el-button>
+        <el-button @click="goBackOrHome(router, '/')">返回</el-button>
       </template>
     </el-result>
 
@@ -158,8 +158,8 @@ const fetchDetail = async () => {
 
     const title = data.title || '专题详情';
     // 顶栏不显示标题（正文里有），只保留返回按钮；浏览器标签标题照旧
-    // 深链接直接进来时没有上一页，兜底回专题列表
-    layoutStore.setPageInfo('', true, () => goBackOrHome(router, '/topics'));
+    // 深链接直接进来时没有上一页，兜底回探索页（专题都在那里）
+    layoutStore.setPageInfo('', true, () => goBackOrHome(router, '/'));
     document.title = `OpenStore | ${title}`;
 
     /*

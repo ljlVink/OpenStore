@@ -124,7 +124,6 @@
         :key="card.key"
         v-show="homeTab === 'home'"
         class="home-section"
-        :active="card.key === 'topic-spotlight' ? homeTab === 'home' : undefined"
       />
     </section>
   </main>
@@ -141,8 +140,7 @@ defineOptions({
 });
 
 import ActiveIncidents from '../components/ActiveIncidents.vue';
-import TopicSpotlight from '../components/TopicSpotlight.vue';
-import AppListSection from '../components/AppListSection.vue';
+import ExploreTopics from '../components/ExploreTopics.vue';
 import {
   getPublicAnnouncements,
   getPublicApps,
@@ -183,10 +181,9 @@ const siteCards = ref<SiteCard[]>([]);
  * key 对应后台里的卡片标识，取不到配置时用下面的默认顺序兜底。
  */
 const HOME_SECTIONS: Record<string, Component> = {
-  'topic-spotlight': TopicSpotlight,
-  'app-list': AppListSection,
+  topics: ExploreTopics,
 };
-const HOME_CARD_FALLBACK = ['topic-spotlight', 'app-list'];
+const HOME_CARD_FALLBACK = ['topics'];
 type HomeCardConfig = { key: string };
 
 const fallbackHomeCards = (): HomeCardConfig[] => HOME_CARD_FALLBACK.map((key) => ({ key }));

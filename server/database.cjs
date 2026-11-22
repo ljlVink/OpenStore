@@ -204,7 +204,7 @@ db.serialize(() => {
   )`);
 
   const seedSiteCards = () => {
-    db.run(`DELETE FROM site_cards WHERE page = 'home' AND key IN ('system-status', 'overview', 'chart-distribution', 'rank-overview')`);
+    db.run(`DELETE FROM site_cards WHERE page = 'home' AND key IN ('system-status', 'overview', 'chart-distribution', 'rank-overview', 'topic-spotlight', 'app-list')`);
     db.run(`DELETE FROM site_cards WHERE page = 'about' OR (page = 'system' AND key IN ('music', 'friend_links', 'group_chats'))`);
     defaultSiteCards.forEach(card => {
       db.run(

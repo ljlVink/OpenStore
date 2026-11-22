@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BASE_URL = String(process.env.SITE_ORIGIN || 'https://next.betahub.tech').replace(/\/+$/, '');
-const ROUTES = ['/', '/apps', '/updates', '/topics', '/about'];
+const ROUTES = ['/', '/apps', '/about'];
 
 const distDir = path.resolve(__dirname, '../dist');
 const outputPath = path.join(distDir, 'sitemap.xml');

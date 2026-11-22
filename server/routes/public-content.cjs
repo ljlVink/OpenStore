@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const db = require('../database.cjs');
-const { getAppGalleryTopic, getAppGalleryTopics } = require('../lib/appgallery-topics.cjs');
+const { getAppGalleryTopic, getAppGalleryExplore } = require('../lib/appgallery-topics.cjs');
 const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
 const { getAppGalleryDiscoverApps, searchAppGallery } = require('../lib/appgallery-lists.cjs');
 const { loadBlockedAppPackages } = require('../lib/blocked-apps.cjs');
@@ -54,13 +54,13 @@ router.get('/api/public/app-detail/:id', async (req, res) => {
   }
 });
 
-// 华为应用市场「探索」页当前展示的专题
-router.get('/api/public/topics', async (req, res) => {
+// 华为应用市场「探索」页：按栏目分组的专题卡片
+router.get('/api/public/explore', async (req, res) => {
   try {
-    res.json({ items: await getAppGalleryTopics() });
+    res.json({ sections: await getAppGalleryExplore() });
   } catch (error) {
-    console.warn('[appgallery-topics] 专题列表查询失败：', error.message);
-    res.status(502).json({ error: '无法加载华为应用市场专题列表' });
+    console.warn('[appgallery-topics] 探索页查询失败：', error.message);
+    res.status(502).json({ error: '无法加载华为应用市场探索页' });
   }
 });
 

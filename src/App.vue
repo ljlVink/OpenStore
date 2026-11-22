@@ -6,7 +6,7 @@ import { useLayoutStore } from './stores/layout';
 import { useRouter, useRoute } from 'vue-router';
 import BrandMark from './components/BrandMark.vue';
 import { goBackOrHome } from './utils/route-scroll';
-import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
+import { Moon, Sunny, ArrowLeft, Compass, Menu, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
 import { useAuthStore } from './stores/auth';
 import { applyPageMeta, pageShareMeta } from './utils/page-share';
 
@@ -146,8 +146,6 @@ const activeTab = shellPath;
 const navItems = [
   { path: '/', label: '探索', icon: Compass },
   { path: '/apps', label: '应用', icon: Menu },
-  { path: '/topics', label: '专题', icon: Collection },
-  { path: '/updates', label: '更新', icon: Refresh },
 ];
 
 const navItemRefs = ref<HTMLElement[]>([]);
@@ -284,10 +282,6 @@ const activeIcon = computed(() => {
   switch (route.path) {
     case '/apps':
       return Menu;
-    case '/topics':
-      return Collection;
-    case '/updates':
-      return Refresh;
     case '/about':
       return InfoFilled;
     default:
@@ -311,7 +305,7 @@ watch(
     // 专题详情页正文里已经有标题，顶栏不再重复显示
     const isDetailPage = /^\/topics\/[^/]+$/.test(route.path);
     const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
-    const isRoot = ['/', '/apps', '/updates', '/topics', '/about'].includes(route.path);
+    const isRoot = ['/', '/apps', '/about'].includes(route.path);
     /*
      * 返回走 goBackOrHome：优先回上一页，直接输 URL / 刷新进来（没有上一页）时回首页；
      * 之前这里是裸的 router.back()，深链接进来时它什么都不做，返回按钮就失灵了。
@@ -438,7 +432,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           漏掉某个页面时它只是走回原来的「每次重新加载」，不会出错。
         -->
         <keep-alive
-          include="HomeView,AppsView,UpdatesView,TopicView,AppCardView,AboutView,SystemStatusView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
+          include="HomeView,AppsView,AppCardView,AboutView,SystemStatusView,TopicDetailView,AppDashboardView,NextAppDetailView"
           :max="30"
         >
           <component :is="Component" :key="route.path" />
@@ -526,22 +520,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           >
             <el-icon :size="20"><Menu /></el-icon>
             <span class="mobile-nav-label">应用</span>
-          </div>
-          <div 
-            class="mobile-nav-item" 
-            :class="{ active: activeTab === '/topics' }" 
-            @click="navigateTo('/topics')"
-          >
-            <el-icon :size="20"><Collection /></el-icon>
-            <span class="mobile-nav-label">专题</span>
-          </div>
-          <div 
-            class="mobile-nav-item" 
-            :class="{ active: activeTab === '/updates' }" 
-            @click="navigateTo('/updates')"
-          >
-            <el-icon :size="20"><Refresh /></el-icon>
-            <span class="mobile-nav-label">更新</span>
           </div>
 
           <div class="mobile-menu-divider"></div>

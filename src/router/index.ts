@@ -8,9 +8,6 @@ const AppDashboardView = () => import('../views/AppDashboardView.vue');
 const NextAppDetailView = () => import('../views/NextAppDetailView.vue');
 const AppCardView = () => import('../views/AppCardView.vue');
 const AppsView = () => import('../views/AppsView.vue');
-const UpdatesView = () => import('../views/UpdatesView.vue');
-const UpdatesAppDetailView = () => import('../views/UpdatesAppDetailView.vue');
-const TopicView = () => import('../views/TopicView.vue');
 const AdminDashboardView = () => import('../views/admin/AdminDashboardView.vue');
 const AboutView = () => import('../views/AboutView.vue');
 import { useAuthStore } from '../stores/auth';
@@ -54,24 +51,10 @@ const router = createRouter({
       component: AppCardView,
       meta: { title: '应用列表', description: '应用卡片列表' }
     },
-    {
-      path: '/updates',
-      name: 'updates',
-      component: UpdatesView,
-      meta: { title: '今日上新', description: '获取最新应用更新和新上架应用信息。' }
-    },
-    {
-      path: '/updates/app/:id',
-      name: 'updates-app-detail',
-      component: UpdatesAppDetailView,
-      meta: { title: '应用更新详情', description: '查看特定应用的详细更新日志和版本信息。' }
-    },
-    {
-      path: '/topics',
-      name: 'topics',
-      component: TopicView,
-      meta: { title: '专题', description: '跟随专题逛鸿蒙生态，发现值得一试的应用。' }
-    },
+    // 更新页、专题列表已下线：旧链接（搜索引擎收录、别人分享的）跳到现在的对应页面
+    { path: '/updates', redirect: '/apps' },
+    { path: '/updates/app/:id', redirect: (to) => `/apps/${encodeURIComponent(String(to.params.id))}` },
+    { path: '/topics', redirect: '/' },
     {
       path: '/topics/:id',
       name: 'topic-detail',

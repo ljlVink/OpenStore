@@ -17,7 +17,7 @@ const PAGE_LABELS = {
   '/exploration': '探索（市场数据）',
   '/apps': '应用列表',
   '/app-cards': '应用卡片',
-  '/topics': '专题列表',
+  '/topics': '专题',
   '/updates': '更新',
   '/about': '关于',
   '/dashboard': '应用详情',
