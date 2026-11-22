@@ -4,11 +4,6 @@ import { setupScrollMemory } from '../utils/route-scroll';
 const HomeView = () => import('../views/HomeView.vue');
 const LoginView = () => import('../views/LoginView.vue');
 const NotFoundView = () => import('../views/NotFoundView.vue');
-const TotalRankView = () => import('../views/TotalRankView.vue');
-const GrowthRankView = () => import('../views/GrowthRankView.vue');
-const HistoryRankView = () => import('../views/HistoryRankView.vue');
-const NonHuaweiRankView = () => import('../views/NonHuaweiRankView.vue');
-const CategoryRankView = () => import('../views/CategoryRankView.vue');
 const AppDashboardView = () => import('../views/AppDashboardView.vue');
 const NextAppDetailView = () => import('../views/NextAppDetailView.vue');
 const AppCardView = () => import('../views/AppCardView.vue');
@@ -90,40 +85,10 @@ const router = createRouter({
       meta: { title: '应用详情', description: '管理和查看你的应用数据仪表盘。' }
     },
     {
-      path: '/rank/total',
-      name: 'total-rank',
-      component: TotalRankView,
-      meta: { title: '总榜', description: '查看OpenStore应用总榜，了解最受欢迎的应用。' }
-    },
-    {
-      path: '/rank/growth',
-      name: 'growth-rank',
-      component: GrowthRankView,
-      meta: { title: '飙升榜', description: '查看OpenStore应用飙升榜，发现潜力应用。' }
-    },
-    {
       path: '/system-status',
       name: 'system-status',
       component: () => import('../views/SystemStatusView.vue'),
       meta: { title: '系统状态', description: '监控系统核心服务与接口状态。' }
-    },
-    {
-      path: '/rank/history',
-      name: 'history-rank',
-      component: HistoryRankView,
-      meta: { title: '下载量', description: '查看应用下载量的历史变化，分析长期趋势。' }
-    },
-    {
-      path: '/rank/non-huawei',
-      name: 'non-huawei-rank',
-      component: NonHuaweiRankView,
-      meta: { title: '第三方应用榜', description: '探索非华为设备上的热门应用。' }
-    },
-    {
-      path: '/rank/category',
-      name: 'category-rank',
-      component: CategoryRankView,
-      meta: { title: '分类榜', description: '按应用分类查看下载量增长，找出正在上涨的赛道。' }
     },
     {
       path: '/about',
@@ -200,7 +165,7 @@ router.beforeEach((to) => {
 router.afterEach((to) => {
   /*
     标题 / 描述 / og / twitter 统一由 page-share 决定：
-    栏目页（探索、应用、专题、榜单…）带网站 logo，信息页（应用、专题详情）
+    栏目页（探索、应用、专题…）带网站 logo，信息页（应用、专题详情）
     带自己的资源图片和文字。
   */
   applyPageMeta({

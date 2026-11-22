@@ -2,7 +2,7 @@
  * 前台页面路径归类 + 各数据源的新鲜度定义。
  *
  * 后台「数据新鲜度」面板用它把访客表里的原始路径聚合成可读的页面名，
- * 详情页（/topics/xxx 等）归并到对应的列表页，榜单保留到二级路径。
+ * 详情页（/topics/xxx 等）归并到对应的列表页。
  */
 const FRESHNESS_SOURCES = [
   // 只统计「前台访客真的会读到」的数据；访客统计、后端进程这类纯后台信息不再出现在这里
@@ -11,7 +11,7 @@ const FRESHNESS_SOURCES = [
 ];
 
 // 页面访问新鲜度：访客表里存的是前台页面路径，这里聚合成「哪个页面最近被访问、近 30 天被访问多少次」。
-// 详情页（/topics/xxx 等）归并到对应的列表页，榜单保留到二级路径。
+// 详情页（/topics/xxx 等）归并到对应的列表页。
 const PAGE_LABELS = {
   '/': '首页',
   '/exploration': '探索（市场数据）',
@@ -21,19 +21,14 @@ const PAGE_LABELS = {
   '/updates': '更新',
   '/about': '关于',
   '/dashboard': '应用详情',
-  '/system-status': '系统状态',
-  '/rank/total': '总下载榜',
-  '/rank/growth': '下载增长榜',
-  '/rank/history': '历史榜单',
-  '/rank/non-huawei': '非华为榜单'
+  '/system-status': '系统状态'
 };
 
 const normalizeVisitorPath = (rawPath) => {
   const path = String(rawPath || '/').split('?')[0].split('#')[0] || '/';
   if (path === '/') return '/';
   const segments = path.split('/').filter(Boolean);
-  if (segments[0] === 'rank' && segments.length > 2) return `/${segments.slice(0, 2).join('/')}`;
-  if (segments.length > 1 && segments[0] !== 'rank') return `/${segments[0]}`;
+  if (segments.length > 1) return `/${segments[0]}`;
   return path;
 };
 

@@ -124,8 +124,6 @@
         :key="card.key"
         v-show="homeTab === 'home'"
         class="home-section"
-        :rank-variant="card.rankVariant"
-        :rank-order="card.rankOrder"
         :active="card.key === 'topic-spotlight' ? homeTab === 'home' : undefined"
       />
     </section>
@@ -144,7 +142,6 @@ defineOptions({
 
 import ActiveIncidents from '../components/ActiveIncidents.vue';
 import TopicSpotlight from '../components/TopicSpotlight.vue';
-import RankOverview from '../components/RankOverview.vue';
 import AppListSection from '../components/AppListSection.vue';
 import {
   getPublicAnnouncements,
@@ -187,14 +184,12 @@ const siteCards = ref<SiteCard[]>([]);
  */
 const HOME_SECTIONS: Record<string, Component> = {
   'topic-spotlight': TopicSpotlight,
-  'rank-overview': RankOverview,
   'app-list': AppListSection,
 };
-const HOME_CARD_FALLBACK = ['topic-spotlight', 'rank-overview', 'app-list'];
-type HomeCardConfig = { key: string; rankVariant: 'classic' | 'stacked' | 'both'; rankOrder: 'stacked' | 'classic' };
+const HOME_CARD_FALLBACK = ['topic-spotlight', 'app-list'];
+type HomeCardConfig = { key: string };
 
-const fallbackHomeCards = (): HomeCardConfig[] =>
-  HOME_CARD_FALLBACK.map((key) => ({ key, rankVariant: 'classic' as const, rankOrder: 'stacked' as const }));
+const fallbackHomeCards = (): HomeCardConfig[] => HOME_CARD_FALLBACK.map((key) => ({ key }));
 
 /*
  * 上次拿到的板块配置，只作兜底（配置接口失败时）。
@@ -244,7 +239,7 @@ const loadHomeCards = async (force = false) => {
     // 接口成功但一张都没启用，说明后台确实全关了，这里保持空列表
     homeCards.value = cards
       .filter((card) => HOME_SECTIONS[card.key])
-      .map((card) => ({ key: card.key, rankVariant: rankVariantOf(card), rankOrder: rankOrderOf(card) }));
+      .map((card) => ({ key: card.key }));
     cacheHomeCards(homeCards.value);
   } catch {
     // 拉不到配置才退回缓存，否则可能渲染出已关闭的卡片
@@ -276,28 +271,6 @@ const getCardStyle = (card: SiteCard) => {
   const span = parsed.span === 12 ? 12 : 24;
   const accent = typeof parsed.accent === 'string' && parsed.accent.trim() ? parsed.accent.trim() : 'bg-yellow';
   return { span, accent };
-};
-
-/** 榜单排行卡片在前台用哪种样式：后台「首页配置」里选的 */
-const rankVariantOf = (card: SiteCard): 'classic' | 'stacked' | 'both' => {
-  try {
-    const parsed = JSON.parse(card.style || '{}');
-    if (parsed.rankVariant === 'stacked' || parsed.rankVariant === 'both') return parsed.rankVariant;
-  } catch {
-    /* 配置坏了就当默认值 */
-  }
-  return 'classic';
-};
-
-/** 「两个都显示」时谁在上面：默认堆叠用量图在上（沿用原来的顺序） */
-const rankOrderOf = (card: SiteCard): 'stacked' | 'classic' => {
-  try {
-    const parsed = JSON.parse(card.style || '{}');
-    if (parsed.rankOrder === 'classic') return 'classic';
-  } catch {
-    /* 配置坏了就当默认值 */
-  }
-  return 'stacked';
 };
 
 let siteCardsFetchedAt = 0;

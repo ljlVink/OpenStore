@@ -8,7 +8,6 @@
 module.exports = [
   // 首页 · 首页页签
   { page: 'home', key: 'topic-spotlight', title: '精选专题', sort_order: 30 },
-  { page: 'home', key: 'rank-overview', title: '榜单排行', sort_order: 40 },
   { page: 'home', key: 'app-list', title: '应用搜索', sort_order: 60 },
 
   // 首页 · 系统页签

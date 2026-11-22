@@ -86,10 +86,10 @@ describe('SEO URL 归一化', () => {
   });
 
   it('过滤后台、接口、静态资源与已下线页面', () => {
-    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/music', '/player', '/articles', '/articles/hello', '/uploads/a.png', '/favicon.ico']) {
+    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/music', '/player', '/articles', '/articles/hello', '/rank/category', '/uploads/a.png', '/favicon.ico']) {
       expect(norm(bad)).toBe('');
     }
-    for (const good of ['/apps/com.foo', '/rank/category', '/topics/t1', '/about']) {
+    for (const good of ['/apps/com.foo', '/topics/t1', '/about']) {
       expect(norm(good)).not.toBe('');
     }
   });

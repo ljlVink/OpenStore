@@ -205,10 +205,6 @@
       </div>
     </div>
 
-    <div class="metrics-section" v-if="appDetail">
-       <AppMetricsChart :metrics="metricsData" :rate-history="rateHistoryData" />
-    </div>
-
     <div v-else-if="!loading && !appDetail" class="not-found">
       <el-empty description="未找到应用信息" />
     </div>
@@ -254,7 +250,6 @@
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { hmApi } from '../services/hm-api';
-import AppMetricsChart from '../components/AppMetricsChart.vue';
 import HarmonyShareIcon from '../components/HarmonyShareIcon.vue';
 import { Picture, ArrowDown, ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -268,8 +263,6 @@ const layoutStore = useLayoutStore();
 const loading = ref(false);
 const appDetail = ref<any>(null);
 const lastMetric = ref<any>(null);
-const metricsData = ref<any[]>([]);
-const rateHistoryData = ref<any[]>([]);
 const scriptTag = ref<HTMLScriptElement | null>(null);
 const descriptionRef = ref<HTMLElement | null>(null);
 const showFullDescription = ref(false);
@@ -632,9 +625,9 @@ const fetchData = async () => {
 
     if (info.pkg_name) {
       try {
+        // 最新一条版本快照：顶部的 SDK、下载量、大小、版本号都取自这里
         const metricsRes = await hmApi.get<any>(`apps/metrics/${encodeURIComponent(info.pkg_name)}`);
         const metrics = metricsRes?.data || metricsRes; // Handle array or wrapped
-        metricsData.value = Array.isArray(metrics) ? metrics : [];
         const sortedMetrics = Array.isArray(metrics) ? metrics.slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : [];
         if (sortedMetrics.length > 0) {
           lastMetric.value = sortedMetrics[0];
@@ -642,18 +635,6 @@ const fetchData = async () => {
       } catch (e) {
         console.error('Failed to fetch metrics', e);
       }
-    }
-
-    try {
-      const rateHistoryRes = await hmApi.get<any>('rankings/rate_history', {
-        app_id: info.app_id ?? null,
-        pkg_name: info.pkg_name ?? null,
-      });
-      const payload = rateHistoryRes?.data ?? rateHistoryRes;
-      const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
-      rateHistoryData.value = list;
-    } catch (e) {
-      console.error('Failed to fetch rate history', e);
     }
   } catch (error) {
     console.error('Failed to fetch app details:', error);
@@ -678,8 +659,6 @@ watch(
     if (!next || next === prev) return;
     appDetail.value = null;
     lastMetric.value = null;
-    metricsData.value = [];
-    rateHistoryData.value = [];
     screenshotList.value = [];
     viewerIndex.value = 0;
     window.scrollTo({ top: 0 });
@@ -1231,15 +1210,6 @@ watch(
   color: var(--el-text-color-primary);
 }
 
-.metrics-section {
-  margin-top: 24px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  border-radius: 12px;
-  box-shadow: var(--el-box-shadow-light);
-  padding: 24px;
-}
-
 .app-description {
   white-space: pre-wrap;
   color: var(--el-text-color-regular);
@@ -1360,8 +1330,7 @@ watch(
     padding: 12px;
   }
 
-  .app-detail-container,
-  .metrics-section {
+  .app-detail-container {
     background: transparent;
     border: none;
     border-radius: 0;

@@ -4,7 +4,6 @@ import { ElMessage } from 'element-plus';
 import { useThemeStore } from './stores/theme';
 import { useLayoutStore } from './stores/layout';
 import { useRouter, useRoute } from 'vue-router';
-import RankNavigation from './components/RankNavigation.vue';
 import BrandMark from './components/BrandMark.vue';
 import { goBackOrHome } from './utils/route-scroll';
 import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
@@ -142,8 +141,6 @@ const shellPath = computed(() => (routerReady.value ? route.path : initialPath))
 const isAdminDashboard = computed(() => shellPath.value.startsWith('/admin/dashboard'));
 /** 后台页面不展示底部 Dock 与移动端导航（后台有自己的侧边栏/顶栏导航） */
 const isAdminRoute = computed(() => shellPath.value.startsWith('/admin'));
-/** 四个榜单页共用一条页签条（见模板里的 .rank-nav-shell） */
-const isRankRoute = computed(() => shellPath.value.startsWith('/rank'));
 const activeTab = shellPath;
 
 const navItems = [
@@ -165,7 +162,7 @@ const sliderStyle = ref({
  * 首次定位完成前不上过渡：
  * 刷新时滑块的初始值是 left/width 都是 0、opacity 0，定位完才跳到真实位置。
  * 如果一开始就带 transition，这一跳会被播放成「从最左边长出来 + 淡入」，
- * 看着就是整条 dock 在动。和 RankNavigation 的页签下划线同一套处理。
+ * 看着就是整条 dock 在动。
  */
 const sliderReady = ref(false);
 /** dock 本体同理：首次摆放（等价的空跳）不上过渡 */
@@ -316,13 +313,10 @@ watch(
     const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
     const isRoot = ['/', '/apps', '/updates', '/topics', '/about'].includes(route.path);
     /*
-     * 榜单页之间可以互相跳（顶部那排页签），这时浏览器历史里前一条就是「上一个榜单」，
-     * 直接后退会退回上一个榜单而不是主页 —— 用户明确要求回主页，所以 /rank/* 一律返回首页。
-     * 其它页面走 goBackOrHome：优先回上一页，直接输 URL / 刷新进来（没有上一页）时回首页；
+     * 返回走 goBackOrHome：优先回上一页，直接输 URL / 刷新进来（没有上一页）时回首页；
      * 之前这里是裸的 router.back()，深链接进来时它什么都不做，返回按钮就失灵了。
      */
-    const isRankPage = route.path.startsWith('/rank');
-    layoutStore.setPageInfo(title, !isRoot, isRankPage ? () => router.push('/') : () => goBackOrHome(router));
+    layoutStore.setPageInfo(title, !isRoot, () => goBackOrHome(router));
     // 换页后滚动位置会重置，顶栏毛玻璃状态跟着重新算一次
     nextTick(syncHeaderScrolled);
   },
@@ -437,14 +431,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
       </div>
     </el-header>
     <el-main class="main-content" :class="{ 'main-content--overflow-visible': isAdminDashboard }">
-      <!--
-        四个榜单页共用同一条页签条：放在 keep-alive 外面，切页签时它不会被重建。
-        之前每个榜单页各自渲染一份，切换时整份被换掉、下划线只能"跳"到新位置 ——
-        只有跨页面复用同一个元素，transition 才有得可animate，看起来才是滑过去的。
-      -->
-      <div v-if="isRankRoute" class="rank-nav-shell">
-        <RankNavigation />
-      </div>
       <router-view v-slot="{ Component }">
         <!--
           前台页面都缓存：切走只是挂起、切回来直接复用上次的 DOM 和数据，不再重新请求。
@@ -452,7 +438,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           漏掉某个页面时它只是走回原来的「每次重新加载」，不会出错。
         -->
         <keep-alive
-          include="HomeView,AppsView,UpdatesView,TopicView,TotalRankView,GrowthRankView,HistoryRankView,NonHuaweiRankView,CategoryRankView,AppCardView,AboutView,SystemStatusView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
+          include="HomeView,AppsView,UpdatesView,TopicView,AppCardView,AboutView,SystemStatusView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
           :max="30"
         >
           <component :is="Component" :key="route.path" />
@@ -609,22 +595,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
 
 .main-content {
   padding-bottom: 100px; /* Space for floating footer */
-}
-
-/*
- * 榜单页签条的外壳：和四个榜单页自己的内容对齐（同样是 1200 居中 + 20px 内边距），
- * 只是它活在 keep-alive 外面，所以切换页签时元素不会被重建。
- */
-.rank-nav-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px 20px 0;
-}
-
-@media (max-width: 768px) {
-  .rank-nav-shell {
-    padding: 16px 12px 0;
-  }
 }
 
 /*

@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { hmApi } from './hm-api';
-import { EXCLUDE_HUAWEI_CONDITION } from './upstream-compat';
 
 export interface NextAppCategory {
   id?: number;
@@ -196,13 +195,7 @@ export const getAppsByCategory = async (
   page = 1,
   size = 20,
   device?: number,
-  aliases?: string[],
-  options?: {
-    sort?: string;
-    desc?: boolean;
-    /** 排除华为官方应用（沿用上游 exclude_huawei 的判定口径） */
-    excludeHuawei?: boolean;
-  }
+  aliases?: string[]
 ) => {
   const apiPage = Math.max(page, 1);
 
@@ -220,17 +213,12 @@ export const getAppsByCategory = async (
   if (device !== undefined && device !== null) {
     conditions.push({ key: 'main_device_codes', value: String(device), op: 'array_contains' });
   }
-  if (options?.excludeHuawei) {
-    conditions.push({ ...EXCLUDE_HUAWEI_CONDITION });
-  }
 
   const query = new URLSearchParams({
     page: String(apiPage),
     page_size: String(size),
     detail: 'true'
   });
-  if (options?.sort) query.set('sort', options.sort);
-  if (options?.desc !== undefined) query.set('desc', String(options.desc));
 
   const response = await hmApi.post<any>(`/apps/query?${query.toString()}`, { and: conditions });
 
@@ -238,90 +226,6 @@ export const getAppsByCategory = async (
     data: normalizeListResponse(response),
     total: extractTotal(response)
   };
-};
-
-/** 大分类下载量增速排行的一条 */
-export interface CategoryGrowthItem {
-  kind_id?: number;
-  kind_name: string;
-  app_count?: number;
-  downloads_increase?: number;
-  growing_apps?: number;
-  growing_app_pct?: number;
-  avg_increase_per_app?: number;
-  max_single_app_increase?: number;
-}
-
-/**
- * 上游「大分类下载量增速排行」。
- *
- * 附带的一层用途：分类筛选的下拉选项。
- * 比起走 /api/public/apps/overview（面板要跑 26 个分类 + 5 个设备的计数查询），
- * 这个接口上游自带 TTL 缓存，一次就够，轻得多。
- *
- * 注意它给的是**上游原始大分类** `kind_name`（93 个，含少量繁体/外语/重名的脏条目），
- * 和 /apps 分类页那套「别名组合并组」（37 组）不是一套口径。
- */
-export const getCategoryGrowthRanking = async (options?: {
-  days?: number;
-  limit?: number;
-  page?: number;
-  /** 最小分类应用数，用来滤掉一两个应用的脏分类（默认交给上游的 1） */
-  minApps?: number;
-}) => {
-  const params: Record<string, any> = {};
-  if (options?.days !== undefined) params.days = options.days;
-  if (options?.limit !== undefined) params.limit = options.limit;
-  if (options?.page !== undefined) params.page = options.page;
-  if (options?.minApps !== undefined) params.min_apps = options.minApps;
-
-  const response = await hmApi.get<any>('/rankings/category_download_growth', params);
-  return {
-    data: normalizeListResponse(response) as CategoryGrowthItem[],
-    total: extractTotal(response)
-  };
-};
-
-/**
- * 按 kind_name 合并重名条目。
- *
- * 上游同一个分类名可能对应多个 kind_id（「体育」237 + 185、「音乐」432 + 162 …），
- * 分开显示会像重复项；合并后重算「人均增量」和「在涨占比」，
- * 保证这两个派生指标仍然自洽（上游原始值本来就等于 增量/应用数）。
- */
-export const mergeCategoryGrowth = (items: CategoryGrowthItem[]): CategoryGrowthItem[] => {
-  const merged = new Map<string, CategoryGrowthItem>();
-
-  for (const raw of items || []) {
-    const name = String(raw?.kind_name || '').trim();
-    if (!name) continue;
-    const prev = merged.get(name);
-    if (!prev) {
-      merged.set(name, { ...raw, kind_name: name });
-      continue;
-    }
-    merged.set(name, {
-      ...prev,
-      app_count: (Number(prev.app_count) || 0) + (Number(raw.app_count) || 0),
-      downloads_increase: (Number(prev.downloads_increase) || 0) + (Number(raw.downloads_increase) || 0),
-      growing_apps: (Number(prev.growing_apps) || 0) + (Number(raw.growing_apps) || 0),
-      max_single_app_increase: Math.max(
-        Number(prev.max_single_app_increase) || 0,
-        Number(raw.max_single_app_increase) || 0
-      )
-    });
-  }
-
-  return [...merged.values()].map((item) => {
-    const count = Number(item.app_count) || 0;
-    const growth = Number(item.downloads_increase) || 0;
-    const growing = Number(item.growing_apps) || 0;
-    return {
-      ...item,
-      avg_increase_per_app: count ? growth / count : 0,
-      growing_app_pct: count ? (growing / count) * 100 : 0
-    };
-  });
 };
 
 export const searchApps = async (query: string, page = 1, size = 20) => {

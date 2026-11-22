@@ -196,6 +196,7 @@ const isExcludedPath = (pathname) => {
   if (p === '/login') return true;
   // 已下线的页面不应继续从历史访客路径提交收录
   if (p === '/submit' || p === '/music' || p === '/player' || p === '/articles' || p.startsWith('/articles/')) return true;
+  if (p === '/rank' || p.startsWith('/rank/')) return true;
   if (STATIC_EXT_RE.test(p)) return true;
   return false;
 };

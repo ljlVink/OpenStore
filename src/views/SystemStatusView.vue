@@ -260,12 +260,6 @@ const pages = ref<PageProbe[]>([
     probePath: '/api/v0/apps/list/1?page_size=1&detail=false',
   }),
   createProbe<PageProbe>({
-    key: 'rank',
-    name: '榜单',
-    route: '/rank/total',
-    probePath: '/api/v0/rankings/download_increase',
-  }),
-  createProbe<PageProbe>({
     key: 'about',
     name: '关于',
     route: '/about',
@@ -823,7 +817,7 @@ useActiveScope(startAutoCheck, stopAutoCheck);
 .page-row {
   display: grid;
   /*
-   * 各列都给定宽：每一行是独立的网格，用 max-content 的话「榜单 /rank/total」
+   * 各列都给定宽：每一行是独立的网格，用 max-content 的话「系统状态 /system-status」
    * 这类长内容会把列撑开，行与行之间的「检测」就错位，窄的时候还会顶出容器。
    */
   grid-template-columns: 8px 116px minmax(0, 1fr) 60px 76px 34px;

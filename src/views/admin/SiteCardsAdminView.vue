@@ -66,47 +66,7 @@
           <el-input v-model="form.title" />
         </el-form-item>
         <el-form-item label="启用">
-          <!-- 榜单排行的「启用」由下面两个图表按钮决定：点亮任意一个=启用，全灭=不启用 -->
-          <el-switch
-            v-model="form.enabledBoolean"
-            :disabled="form.key === 'rank-overview'"
-          />
-        </el-form-item>
-        <!-- 榜单排行有「经典图表」和「堆叠用量图」两张卡，前台想显示哪张（或都显示）由这里决定 -->
-        <el-form-item v-if="form.key === 'rank-overview'" label="榜单展示">
-          <div class="rank-display-field">
-            <!-- 点一下点亮、再点熄灭；可以两个都亮（=两张卡都显示） -->
-            <div class="chip-row">
-              <button
-                v-for="option in CHART_OPTIONS"
-                :key="option.value"
-                type="button"
-                class="rank-chip"
-                :class="{ 'is-on': rankCharts.includes(option.value) }"
-                :aria-pressed="rankCharts.includes(option.value)"
-                @click="toggleChart(option.value)"
-              >
-                <span class="rank-chip-dot" aria-hidden="true"></span>{{ option.label }}
-              </button>
-            </div>
-            <!--
-              上下顺序：永远占着这块高度（未满足条件时只是隐藏），
-              否则点亮/熄灭按钮会让弹窗跟着忽高忽低。
-            -->
-            <div class="chip-row" :class="{ 'is-hidden': rankCharts.length !== 2 }">
-              <button
-                v-for="option in ORDER_OPTIONS"
-                :key="option.value"
-                type="button"
-                class="rank-chip"
-                :class="{ 'is-on': formStyle.rankOrder === option.value }"
-                :disabled="rankCharts.length !== 2"
-                @click="formStyle.rankOrder = option.value"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
+          <el-switch v-model="form.enabledBoolean" />
         </el-form-item>
         <template v-if="form.page === 'system'">
           <el-form-item label="宽度">
@@ -189,39 +149,7 @@ const dockWrapped = ref(false);
 let dockObserver: ResizeObserver | null = null;
 
 const form = ref({ title: '', enabledBoolean: true, page: 'system', key: '' });
-const formStyle = ref({
-  span: 24,
-  accent: 'bg-yellow',
-  /** rankVariant === 'both' 时谁在上面：stacked=堆叠用量图在上（默认，沿用原顺序） */
-  rankOrder: 'stacked' as 'stacked' | 'classic'
-});
-
-/*
- * 榜单排行显示哪几张卡：用两个"点亮"按钮选（[] / [classic] / [stacked] / [classic, stacked]）。
- * 存进库时再折算成原来的 rankVariant 字段，前台和接口都不用改。
- */
-const rankCharts = ref<Array<'classic' | 'stacked'>>(['classic']);
-
-const CHART_OPTIONS = [
-  { value: 'classic' as const, label: '经典图表' },
-  { value: 'stacked' as const, label: '堆叠用量图' }
-];
-const ORDER_OPTIONS = [
-  { value: 'stacked' as const, label: '堆叠用量图在上' },
-  { value: 'classic' as const, label: '经典图表在上' }
-];
-
-/** 点一下点亮、再点熄灭（两个可以同时亮） */
-const toggleChart = (value: 'classic' | 'stacked') => {
-  const index = rankCharts.value.indexOf(value);
-  if (index >= 0) rankCharts.value.splice(index, 1);
-  else rankCharts.value.push(value);
-};
-
-// 点亮任意一个 → 自动启用；全灭 → 自动不启用
-watch(rankCharts, (list) => {
-  if (form.value.key === 'rank-overview') form.value.enabledBoolean = list.length > 0;
-}, { deep: true });
+const formStyle = ref({ span: 24, accent: 'bg-yellow' });
 
 const activePageMeta = computed(() => PAGES.find((page) => page.key === activePage.value) ?? PAGES[0]);
 
@@ -306,20 +234,7 @@ const editRow = (row: CardRow) => {
   formStyle.value = {
     span: style.span === 12 ? 12 : 24,
     accent: typeof style.accent === 'string' && style.accent ? style.accent : 'bg-yellow',
-    rankOrder: style.rankOrder === 'classic' ? 'classic' : 'stacked',
   };
-  /*
-   * 把存的 rankVariant 还原成两个按钮的点亮状态。
-   * 卡片本身被停用（enabled=0）时两个都不点亮 —— 和"全灭就是不启用"保持一致。
-   */
-  const variant = style.rankVariant === 'stacked' || style.rankVariant === 'both' ? style.rankVariant : 'classic';
-  rankCharts.value = !row.enabledBoolean
-    ? []
-    : variant === 'both'
-      ? ['classic', 'stacked']
-      : variant === 'stacked'
-        ? ['stacked']
-        : ['classic'];
   showDialog.value = true;
 };
 
@@ -327,24 +242,7 @@ const save = async () => {
   if (!editingId.value) return;
   saving.value = true;
   try {
-    // 两个按钮的点亮状态折算回原来的 rankVariant，前台和接口都不用动
-    const rankVariant: 'classic' | 'stacked' | 'both' =
-      rankCharts.value.length === 2
-        ? 'both'
-        : rankCharts.value.includes('stacked')
-          ? 'stacked'
-          : 'classic';
-    // 榜单卡片才写 rankVariant / rankOrder，其它卡片保持原来的 style 结构
-    const stylePayload =
-      form.value.key === 'rank-overview'
-        ? {
-            span: formStyle.value.span,
-            accent: formStyle.value.accent,
-            rankVariant,
-            // 只有两张都显示时顺序才有意义，其余情况存默认值
-            rankOrder: rankVariant === 'both' ? formStyle.value.rankOrder : 'stacked'
-          }
-        : { span: formStyle.value.span, accent: formStyle.value.accent };
+    const stylePayload = { span: formStyle.value.span, accent: formStyle.value.accent };
     await updateSiteCard(editingId.value, {
       title: form.value.title,
       enabled: form.value.enabledBoolean ? 1 : 0,
@@ -781,81 +679,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   opacity: 0.95;
-}
-
-/*
- * 榜单展示：两组按钮各占一行（以前 div 会跟按钮挤在同一行，看着很乱）。
- * 下面那行永远占位，只是不满足条件时藏起来 —— 点按钮不会改变弹窗高度。
- *
- * 按钮用自绘的 chip，而不是 el-checkbox-button / el-radio-button：
- * 后两者在这套深色主题里选中态渲染不一致（有时看不出哪几个亮了），
- * 自己画能保证"点亮 = 主色描边 + 主色淡背景 + 字变主色"，一眼能认。
- */
-.rank-display-field {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.chip-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 32px;
-}
-
-.chip-row.is-hidden {
-  visibility: hidden;
-}
-
-.rank-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 6px;
-  background-color: transparent;
-  color: var(--el-text-color-regular);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.rank-chip:hover:not(:disabled) {
-  border-color: var(--el-color-primary-light-5);
-  color: var(--el-color-primary);
-}
-
-/* 点亮态：主色描边 + 主色淡背景 + 主色字，深色主题下也一眼可辨 */
-.rank-chip.is-on {
-  border-color: var(--el-color-primary);
-  background-color: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.rank-chip:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-/* 小圆点：亮起时填主色并微微放大，额外一层"我选上了"的视觉提示 */
-.rank-chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--el-border-color-darker);
-  transition: background-color 0.2s ease, transform 0.2s ease;
-}
-
-.rank-chip.is-on .rank-chip-dot {
-  background-color: var(--el-color-primary);
-  transform: scale(1.3);
 }
 
 @media (max-width: 640px) {

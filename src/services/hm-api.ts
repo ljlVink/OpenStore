@@ -6,7 +6,7 @@ interface CacheItem<T> {
   timestamp: number;
 }
 
-/** 列表 / 榜单的缓存时长：够新，又能挡掉重复请求 */
+/** 应用列表的缓存时长：够新，又能挡掉重复请求 */
 const LIST_TTL_MS = 45_000;
 
 interface HmApiClientConfig {
@@ -91,13 +91,10 @@ class HmApiClient {
     return `${path}?${queryString}`;
   }
 
-  /** 缓存时长（毫秒）：列表 / 榜单 45s，其余不缓存 */
+  /** 缓存时长（毫秒）：应用列表 / 按条件查询的应用集 45s，其余不缓存 */
   private guessTtlMs(path: string): number {
-    // 注：/rankings/top-downloads 已在上游 0.9.0 移除，不再需要缓存规则
-    // 列表 / 榜单：应用列表、按条件查询的应用集、各类榜单
     if (path.includes('apps/list')) return LIST_TTL_MS;
     if (path.includes('apps/query')) return LIST_TTL_MS;
-    if (path.includes('rankings/')) return LIST_TTL_MS;
     return 0; // 默认不缓存
   }
 
