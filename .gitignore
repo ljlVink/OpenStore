@@ -38,3 +38,6 @@ npm-debug.log*
 
 # Build temp (Windows: redirect TEMP/TMP to project-local dir to avoid Defender file locks)
 build-tmp/
+
+# Local research tools, sample packages, and analysis output
+/refs/
