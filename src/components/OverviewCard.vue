@@ -1,13 +1,6 @@
 <template>
   <el-card class="overview-card" shadow="hover" v-loading="loading">
-    <template #header>
-      <div class="card-header">
-        <span>市场概览</span>
-        <span class="installation-volume" v-if="marketInfo.app_count?.max_download_count">
-          鸿蒙装机量: <AnimatedNumber :value="marketInfo.app_count.max_download_count" />
-        </span>
-      </div>
-    </template>
+    <template #header>市场概览</template>
     <el-row :gutter="20">
       <el-col :span="6" :xs="12">
         <div class="stat-item">
@@ -65,7 +58,6 @@ import AnimatedNumber from './AnimatedNumber.vue';
 interface AppCount {
   apps: number;
   atomic_services: number;
-  max_download_count: number;
   total: number;
 }
 
@@ -101,16 +93,6 @@ onMounted(() => {
 <style scoped>
 .overview-card {
   margin-bottom: 20px;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.installation-volume {
-  font-size: 14px;
-  color: #409EFF;
-  font-weight: bold;
 }
 .stat-item {
   text-align: center;
