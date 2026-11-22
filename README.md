@@ -1,7 +1,9 @@
 <div align="center">
 
-# OpenStore
-**OpenStore** 是一个专注于鸿蒙（HarmonyOS）应用发现与分享的第三方应用商店平台
+# CloseStore
+**CloseStore** 是一个专注于鸿蒙（HarmonyOS）应用发现与分享的第三方应用商店平台
+
+本项目基于 [XiaoChuangll/OpenStore](https://github.com/XiaoChuangll/OpenStore)（MIT License）修改。
 </div>
 
 <p align="center">
@@ -13,15 +15,9 @@
   <br><br>
 </p>
 
+## WARNINGS
 
-
-## 首页
-
-首页可配置的卡片为精选专题和应用搜索。可在后台「首页配置」调整卡片顺序和显隐。
-
-## 专题
-
-专题列表由服务端 `/api/public/topics` 读取华为应用市场客户端「探索」页当前展示的专题（手机版在前，平板版独有的追加在后），结果缓存 10 分钟；华为撤下的专题随之从列表消失。专题详情由 `/api/public/topics/:id` 实时读取华为 AppGallery 网页的专题接口，结果缓存 5 分钟；专题详情页、精选专题、专题列表的图标和分享卡共用这份数据。华为已下架的专题返回 404。
+THIS PROJECT IS UNDER DEVELOPMENT.
 
 ## ❤️ 鸣谢
 

@@ -22,25 +22,22 @@ const { getAppGalleryApp } = require('./appgallery-apps.cjs');
  */
 const SITE_ORIGIN = String(process.env.SITE_ORIGIN || 'https://next.betahub.tech').replace(/\/+$/, '');
 const SITE_LOGO_URL = `${SITE_ORIGIN}/og-image.png`;
-const SITE_NAME = 'OpenStore';
+const SITE_NAME = 'CloseStore';
 const SITE_DEFAULT_DESCRIPTION =
-  'OpenStore 提供华为应用市场看板、鸿蒙应用看板与鸿蒙应用数据面板，支持应用探索、榜单排行与更新动态。';
-const SHARE_UPSTREAM_BASE = process.env.VITE_API_TARGET || 'https://shenjack.top:10003';
+  'CloseStore 提供华为应用市场看板、鸿蒙应用看板与鸿蒙应用数据面板，支持应用探索、专题与更新动态。';
 
 /** 栏目页：标题 / 描述用本栏目的，分享图统一用网站 logo */
 const PAGE_SHARE_META = {
   // 首页分享的副标题用一句人话；SEO 描述还是那句带关键词的（只写进 name="description"）
   '/': {
     title: '鸿蒙应用市场面板',
-    description: '发现最新、最热门的鸿蒙应用，探索 OpenStore 的精彩世界。',
+    description: '发现最新、最热门的鸿蒙应用，探索 CloseStore 的精彩世界。',
     seoDescription: SITE_DEFAULT_DESCRIPTION
   },
-  '/apps': { title: '应用', description: '浏览 OpenStore 全部应用，查找你需要的工具和游戏。' },
-  '/rank/total': { title: '总下载榜', description: '查看 OpenStore 应用总榜，了解最受欢迎的应用。' },
-  '/rank/growth': { title: '飙升榜', description: '查看 OpenStore 应用飙升榜，发现潜力应用。' },
+  '/apps': { title: '应用', description: '浏览 CloseStore 全部应用，查找你需要的工具和游戏。' },
   '/app-cards': { title: '应用列表', description: '应用卡片列表。' },
   '/system-status': { title: '系统状态', description: '监控系统核心服务与接口状态。' },
-  '/about': { title: '关于', description: '了解 OpenStore 的开发背景和团队信息。' }
+  '/about': { title: '关于', description: '了解 CloseStore 的开发背景和团队信息。' }
 };
 
 /** 抓取器（含微信 / QQ / 微博等国内平台的预览抓取） */
@@ -187,7 +184,7 @@ const applyShareCardToHtml = (html, card) => {
     out = out.replace(re, '');
   };
 
-  // 标签页标题统一「OpenStore | X」，卡片标题（og:title）信息页用资源名本身
+  // 标签页标题统一「CloseStore | X」，卡片标题（og:title）信息页用资源名本身
   const docTitle = card.docTitle || card.title;
   if (out.includes('<title>')) out = out.replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtmlAttr(docTitle)}</title>`);
   else out = out.replace('</head>', `<title>${escapeHtmlAttr(docTitle)}</title>\n</head>`);

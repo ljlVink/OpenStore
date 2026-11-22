@@ -304,7 +304,7 @@ watch(
   () => {
     // 专题详情页正文里已经有标题，顶栏不再重复显示
     const isDetailPage = /^\/topics\/[^/]+$/.test(route.path);
-    const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
+    const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'CloseStore');
     const isRoot = ['/', '/apps', '/about'].includes(route.path);
     /*
      * 返回走 goBackOrHome：优先回上一页，直接输 URL / 刷新进来（没有上一页）时回首页；
@@ -384,7 +384,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
               class="app-title"
               :class="{ 'is-hidden-on-mobile': layoutStore.showCustomTitle }"
             >
-              OpenStore
+              CloseStore
             </span>
           </div>
           <template #dropdown>
@@ -408,7 +408,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
             class="app-title"
             :class="{ 'is-hidden-on-mobile': layoutStore.showCustomTitle }"
           >
-            OpenStore
+            CloseStore
           </span>
         </div>
       </div>

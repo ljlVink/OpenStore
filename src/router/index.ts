@@ -24,14 +24,14 @@ const router = createRouter({
       meta: {
         title: '探索',
         // 分享卡片副标题（人话版）；SEO 用的关键词描述保留在 index.html 的 name="description" 里
-        description: '发现最新、最热门的鸿蒙应用，探索 OpenStore 的精彩世界。'
+        description: '发现最新、最热门的鸿蒙应用，探索 CloseStore 的精彩世界。'
       }
     },
     {
       path: '/apps',
       name: 'apps',
       component: AppsView,
-      meta: { title: '应用', description: '浏览OpenStore所有应用，查找你需要的工具和游戏。' }
+      meta: { title: '应用', description: '浏览CloseStore所有应用，查找你需要的工具和游戏。' }
     },
     {
       path: '/apps/:id',
@@ -77,13 +77,13 @@ const router = createRouter({
       path: '/about',
       name: 'about',
       component: AboutView,
-      meta: { title: '关于', description: '了解 OpenStore 的开发背景和团队信息。' }
+      meta: { title: '关于', description: '了解 CloseStore 的开发背景和团队信息。' }
     },
     {
       path: '/login',
       name: 'login',
       component: LoginView,
-      meta: { title: '登录', description: '登录OpenStore账户，享受更多个性化服务。' }
+      meta: { title: '登录', description: '登录CloseStore账户，享受更多个性化服务。' }
     },
     {
       path: '/admin',
@@ -93,13 +93,13 @@ const router = createRouter({
       path: '/admin/login',
       name: 'admin-login',
       component: LoginView,
-      meta: { title: '管理员登录', description: 'OpenStore管理员登录页面。' }
+      meta: { title: '管理员登录', description: 'CloseStore管理员登录页面。' }
     },
     {
       path: '/admin/dashboard',
       name: 'admin-dashboard',
       component: AdminDashboardView,
-      meta: { title: '后台管理', requiresAuth: true, description: 'OpenStore 后台管理系统，管理公告、评论和站点设置。' }
+      meta: { title: '后台管理', requiresAuth: true, description: 'CloseStore 后台管理系统，管理公告、评论和站点设置。' }
     },
     {
       path: '/admin/settings',

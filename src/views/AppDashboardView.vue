@@ -587,7 +587,7 @@ const fetchData = async () => {
     const title = info.name || '应用详情';
     // 深链接直接进来时没有上一页，兜底回首页（默认 fallback）
     layoutStore.setPageInfo(title, true, () => goBackOrHome(router));
-    document.title = `OpenStore | ${title}`;
+    document.title = `CloseStore | ${title}`;
 
     // 分享 / meta 描述统一由 page-share 决定（用「应用简介」brief_desc，不是长「应用说明」）
   } catch (error) {

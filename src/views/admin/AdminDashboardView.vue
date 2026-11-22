@@ -11,7 +11,7 @@
         <!-- 顶部品牌：logo + 站点名（logo 与顶栏同一个 mask 图案） -->
         <div class="admin-brand">
           <BrandMark class="admin-brand-logo" :size="22" />
-          <span class="admin-brand-name">OpenStore</span>
+          <span class="admin-brand-name">CloseStore</span>
         </div>
 
         <div class="admin-menu-wrap">

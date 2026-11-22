@@ -60,7 +60,7 @@
       <img src="/favicon.svg" alt="" class="hero-logo" />
 
       <div class="hero-main">
-        <h1 class="hero-title">OpenStore</h1>
+        <h1 class="hero-title">CloseStore</h1>
         <p class="hero-tagline">鸿蒙应用数据探索与分析平台</p>
       </div>
     </div>

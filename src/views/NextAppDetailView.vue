@@ -488,7 +488,7 @@ const fetchDetail = async () => {
       const title = appDetail.value.name || '应用详情';
       // 深链接直接进来时没有上一页，兜底回应用列表
       layoutStore.setPageInfo(title, true, () => goBackOrHome(router, '/apps'));
-      document.title = `OpenStore | ${title}`;
+      document.title = `CloseStore | ${title}`;
       // 分享卡片带上这个应用自己的图标和文字
       setPageShareMeta(buildAppShareMeta(appDetail.value));
     }

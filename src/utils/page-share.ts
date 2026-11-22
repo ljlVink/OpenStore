@@ -12,12 +12,12 @@ import { ElMessage } from 'element-plus';
  * 信息页在数据加载完成后调用 setPageShareMeta 注册，离开时自动清空。
  */
 
-export const SITE_NAME = 'OpenStore';
+export const SITE_NAME = 'CloseStore';
 /** 网站 logo（也是默认分享图） */
 export const SITE_LOGO = '/og-image.png';
-export const SITE_DEFAULT_TITLE = 'OpenStore | 鸿蒙应用市场面板';
+export const SITE_DEFAULT_TITLE = 'CloseStore | 鸿蒙应用市场面板';
 export const SITE_DEFAULT_DESCRIPTION =
-  'OpenStore 提供华为应用市场看板、鸿蒙应用看板与鸿蒙应用数据面板，支持应用探索、榜单排行与更新动态。';
+  'CloseStore 提供华为应用市场看板、鸿蒙应用看板与鸿蒙应用数据面板，支持应用探索、专题与更新动态。';
 
 export interface PageShareMeta {
   /** 卡片标题（不含站点后缀） */
@@ -82,7 +82,7 @@ type RouteLike = {
 };
 
 export interface ShareInfo {
-  /** 分享卡片标题：栏目标题（OpenStore | 探索）或信息页自己的标题（应用名称 / 专题标题） */
+  /** 分享卡片标题：栏目标题（CloseStore | 探索）或信息页自己的标题（应用名称 / 专题标题） */
   title: string;
   description: string;
   image: string;
@@ -108,8 +108,8 @@ export const resolveShareInfo = (route: RouteLike): ShareInfo => {
 
   if (share && share.title) {
     /*
-     * 有些页面注册的标题本身就带站点名（例如音乐页的「OpenStore | 音乐」），
-     * 这里再补一次就会变成「OpenStore | OpenStore | 音乐」，先判一下。
+     * 有些页面注册的标题本身就带站点名（例如音乐页的「CloseStore | 音乐」），
+     * 这里再补一次就会变成「CloseStore | CloseStore | 音乐」，先判一下。
      */
     const shareTitle = share.title.startsWith(SITE_NAME) ? share.title : `${SITE_NAME} | ${share.title}`;
     return {
@@ -235,7 +235,7 @@ export const shareCurrentPage = async (message = '已复制分享内容') => {
       path: window.location.pathname,
       fullPath: `${window.location.pathname}${window.location.search}`,
       query: {},
-      meta: { title: document.title.replace(/^OpenStore\s*[|·-]\s*/, '') },
+      meta: { title: document.title.replace(/^CloseStore\s*[|·-]\s*/, '') },
     });
 
   const nav = navigator as Navigator & { canShare?: (data: unknown) => boolean };

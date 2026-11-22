@@ -160,7 +160,7 @@ const fetchDetail = async () => {
     // 顶栏不显示标题（正文里有），只保留返回按钮；浏览器标签标题照旧
     // 深链接直接进来时没有上一页，兜底回探索页（专题都在那里）
     layoutStore.setPageInfo('', true, () => goBackOrHome(router, '/'));
-    document.title = `OpenStore | ${title}`;
+    document.title = `CloseStore | ${title}`;
 
     /*
       分享卡片：专题本身没有封面图，用专题里第一个应用的图标当资源图片，

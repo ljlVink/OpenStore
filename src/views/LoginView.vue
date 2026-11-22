@@ -5,7 +5,7 @@
       <aside ref="stageRef" class="stage" aria-hidden="true">
         <div class="stage-top">
           <BrandMark class="brand-mark" :size="26" />
-          <span class="brand-name">OpenStore</span>
+          <span class="brand-name">CloseStore</span>
           <span class="brand-badge">{{ isAdmin ? '控制台' : '登录' }}</span>
         </div>
 
