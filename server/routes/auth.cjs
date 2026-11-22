@@ -109,7 +109,6 @@ router.get('/api/admin/overview', requireAuth, (req, res) => {
     uniqueIpCount: 0,
     locationKinds: 0,
     appCount: 0,
-    feedbackCount: 0,
     commentCount: 0,
     articleCount: 0,
     systemUptime: process.uptime(),
@@ -120,7 +119,6 @@ router.get('/api/admin/overview', requireAuth, (req, res) => {
   const queries = [
     new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM visitors`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0)))),
     new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM apps`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0)))),
-    new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM feedbacks WHERE status='pending'`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0)))),
     new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM comments WHERE status='pending'`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0)))),
     new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM blogs`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0))))
   ];
@@ -128,9 +126,8 @@ router.get('/api/admin/overview', requireAuth, (req, res) => {
   Promise.all(queries).then(results => {
     stats.visitorCount = results[0];
     stats.appCount = results[1];
-    stats.feedbackCount = results[2];
-    stats.commentCount = results[3];
-    stats.articleCount = results[4];
+    stats.commentCount = results[2];
+    stats.articleCount = results[3];
 
     // 独立 IP 复用访客页那套聚合缓存（后台每分钟预热），不用再扫一次 18 万行
     cachedVisitorsGet(

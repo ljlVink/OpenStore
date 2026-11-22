@@ -303,11 +303,6 @@
               <span class="oc-name">最近提交</span>
               <span class="oc-desc">按「关于作者」里的仓库地址自动从 GitHub 拉取</span>
             </li>
-            <li class="other-card">
-              <span class="oc-name">意见反馈</span>
-              <span class="oc-desc">由访客提交，处理记录在「用户反馈」</span>
-              <el-button link type="primary" size="small" @click="openPane('feedbacks')">去查看</el-button>
-            </li>
           </ul>
         </AdminSection>
       </div>
@@ -405,7 +400,7 @@ defineProps<{ embedded?: boolean }>();
 
 const router = useRouter();
 
-/** 切到「关于」相关的其他面板：卡片顺序在首页配置，日志 / 反馈有各自的管理页 */
+/** 切到「关于」相关的其他面板：卡片顺序在首页配置，日志有独立的管理页 */
 const openPane = (pane: string) => {
   router.push({ path: '/admin/dashboard', query: { pane } });
 };

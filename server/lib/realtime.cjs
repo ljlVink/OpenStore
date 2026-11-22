@@ -1,7 +1,7 @@
 /*
  * WebSocket 实时通道。
  *
- * 这条通道推送的 visitors:new / logs:new / submissions:update 等都属于后台数据，
+ * 这条通道推送的访客和日志事件等属于后台数据，
  * 因此升级握手时必须校验管理员 JWT，未登录访客不建立连接。
  *
  * 用 attachWebSocket(server, { jwtSecret }) 挂到 http.Server 上；
@@ -9,9 +9,6 @@
  */
 const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
-// WebSocket server
-// 这条通道推送的 visitors:new / logs:new / submissions:update 等都属于后台数据，
-// 因此升级握手时必须校验管理员 JWT，未登录访客不再建立连接。
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Set();
 wss.on('connection', (ws, request, auth) => {

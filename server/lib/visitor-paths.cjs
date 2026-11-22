@@ -26,7 +26,6 @@ const PAGE_LABELS = {
   '/articles': '文章',
   '/about': '关于',
   '/submit': '投稿',
-  '/music': '音乐',
   '/dashboard': '应用详情',
   '/system-status': '系统状态',
   '/rank/total': '总下载榜',

@@ -132,18 +132,6 @@ router.get('/api/visitors', requireAuth, (req, res) => {
   });
 });
 
-router.post('/api/admin/feedbacks/batch-delete', requireAuth, (req, res) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const { ids } = req.body || {};
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: 'No IDs provided' });
-  }
-  const placeholders = ids.map(() => '?').join(',');
-  db.run(`DELETE FROM feedbacks WHERE id IN (${placeholders})`, ids, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ deleted: this.changes });
-  });
-});
 router.post('/api/visitors/batch-delete', requireAuth, (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {

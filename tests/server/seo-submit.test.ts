@@ -86,7 +86,7 @@ describe('SEO URL 归一化', () => {
   });
 
   it('过滤后台、接口与静态资源', () => {
-    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/player', '/uploads/a.png', '/favicon.ico']) {
+    for (const bad of ['/admin/dashboard', '/api/public/apps', '/login', '/submit', '/music', '/player', '/uploads/a.png', '/favicon.ico']) {
       expect(norm(bad)).toBe('');
     }
     for (const good of ['/apps/com.foo', '/articles/hello', '/rank/category', '/topics/t1', '/about']) {

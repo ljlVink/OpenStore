@@ -1,23 +1,4 @@
 /**
- * 判断一次导航是否「只是曲目变了」。
- *
- * 播放页和音乐页切歌时会把 ?track= 同步进地址栏，这算一次路由导航；
- * 如果照常执行「回到顶部」，用户每点一次上一首 / 下一首，页面就会被拽回顶上。
- * 所以这种情况要跳过滚动重置，而切换页面、切换 view 之类的导航仍按原样回顶部。
- */
-export const onlyTrackQueryChanged = (
-  to: Record<string, unknown>,
-  from: Record<string, unknown>
-): boolean => {
-  const keys = new Set([...Object.keys(to), ...Object.keys(from)]);
-  for (const key of keys) {
-    if (key === 'track') continue;
-    if (String(to[key] ?? '') !== String(from[key] ?? '')) return false;
-  }
-  return true;
-};
-
-/**
  * 子页面左上角「返回」按钮用：**优先回上一页**。
  *
  * 用 router.back() 时，上一页（比如首页）是从 keep-alive 里还原回来的，

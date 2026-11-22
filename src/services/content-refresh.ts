@@ -14,13 +14,11 @@ export const contentVersion = ref(0);
 const CONTENT_EVENTS = new Set([
   'site_cards:update',
   'about:update',
-  'apps:update',
   'announcements:update',
   'links:update',
   'groups:update',
   'changelogs:update',
   'incidents:update',
-  'submissions:update',
 ]);
 
 let bound = false;

@@ -154,7 +154,7 @@ module.exports = ({ collectPerfCheckRoutes }) => {
   });
 
   // ---- 调用拓扑：从实时日志缓冲聚合出「前端 → 后端 API → 上游」的链路 ----
-  const UPSTREAM_PROXY_PREFIXES = ['/api/v0', '/api/proxy-request', '/api/music-proxy'];
+  const UPSTREAM_PROXY_PREFIXES = ['/api/v0'];
 
 
   router.post('/api/admin/perf-check', requireAuth, async (req, res) => {

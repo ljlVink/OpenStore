@@ -194,8 +194,8 @@ const isExcludedPath = (pathname) => {
   if (p.startsWith('/uploads')) return true;
   if (p.startsWith('/assets')) return true;
   if (['/login', '/admin/login', '/submit'].includes(p)) return true;
-  // 播放器地址带 ?track= 会衍生大量近似 URL
-  if (p === '/player') return true;
+  // 已下线的页面不应继续从历史访客路径提交收录
+  if (p === '/music' || p === '/player') return true;
   if (STATIC_EXT_RE.test(p)) return true;
   return false;
 };

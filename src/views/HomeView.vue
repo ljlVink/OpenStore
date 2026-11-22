@@ -73,37 +73,17 @@
           :xs="24"
           class="site-card-col"
         >
-          <el-card class="site-card" :class="{ 'music-card-wrapper': card.key === 'music' }" shadow="hover">
+          <el-card class="site-card" shadow="hover">
             <template #header>
               <div class="site-card-header">
                 <div class="header-left">
-                  <div class="accent-bar" :class="card.key === 'music' ? 'bg-red' : getCardStyle(card).accent"></div>
+                  <div class="accent-bar" :class="getCardStyle(card).accent"></div>
                   <span class="card-title">{{ card.title }}</span>
                 </div>
                </div>
             </template>
 
-            <template v-if="card.key === 'music'">
-              <div class="music-card-content" @click.stop="goMusic()">
-                <div class="music-card-copy">
-                  <p class="music-card-desc">每日推荐、歌单与排行榜，边听边逛应用市场</p>
-                  <div class="music-actions">
-                    <button
-                      v-for="entry in MUSIC_ENTRIES"
-                      :key="entry.label"
-                      type="button"
-                      class="music-action-btn"
-                      @click.stop="goMusic(entry.view)"
-                    >
-                      {{ entry.label }}
-                    </button>
-                  </div>
-                </div>
-                <img src="/music.png" class="music-card-img" alt="" aria-hidden="true" />
-              </div>
-            </template>
-
-            <template v-else-if="card.key === 'friend_links'">
+            <template v-if="card.key === 'friend_links'">
               <div v-if="friendLinks.length > 0" class="friend-links-grid">
                 <a
                   v-for="item in friendLinks"
@@ -203,7 +183,6 @@
 import { computed, onMounted, onUnmounted, ref, onActivated, onDeactivated, watch } from 'vue';
 import type { Component } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import { useLayoutStore } from '../stores/layout';
 
 defineOptions({
@@ -394,22 +373,6 @@ const friendLinkIcon = (item: FriendLink) => {
   return icon || faviconUrl(item.url);
 };
 
-/** 音乐卡片上的四个入口：view 是进入音乐页后要打开的板块 */
-const MUSIC_ENTRIES: Array<{ label: string; view: 'home' | 'radar' | 'recommend' | 'rank' }> = [
-  { label: '每日推荐', view: 'home' },
-  { label: '雷达歌单', view: 'radar' },
-  { label: '推荐歌单', view: 'recommend' },
-  { label: '排行榜单', view: 'rank' },
-];
-
-const goMusic = async (view: 'home' | 'radar' | 'recommend' | 'rank' = 'home') => {
-  try {
-    await router.push({ path: '/music', query: { view } });
-  } catch {
-    ElMessage.warning('跳转失败');
-  }
-};
-
 let siteCardsFetchedAt = 0;
 let siteCardsLoaded = false;
 /** 上次已经拉过内容的卡片组合，用来判断要不要重新请求那批内容接口 */
@@ -418,7 +381,7 @@ let loadedContentKeys = '';
 const loadSiteCards = async (force = false) => {
   if (!force && siteCardsLoaded && Date.now() - siteCardsFetchedAt < SITE_CONFIG_REFRESH_MS) return;
   try {
-    // 「推荐」页签的信息卡片（公告 / 音乐 / 应用 / 链接 / 群聊）
+    // 「推荐」页签的信息卡片（公告 / 应用 / 链接 / 群聊）
     siteCards.value = await getPublicSiteCards('system');
   } catch {
     siteCards.value = [];
@@ -910,126 +873,4 @@ onUnmounted(() => {
   }
 }
 
-.music-card-wrapper {
-  cursor: pointer;
-}
-
-/* 音乐卡片：标题沿用公共卡片头，正文做成「一句话说明 + 四个入口 + 插画」 */
-.music-card-wrapper :deep(.el-card__header) {
-  border-bottom: none !important;
-  padding-bottom: 4px;
-}
-
-.music-card-wrapper :deep(.el-card__body) {
-  /* 左下角一层很淡的红色晕染，和标题旁的红色标记条呼应 */
-  background-image: radial-gradient(
-    130% 150% at 0% 115%,
-    color-mix(in srgb, var(--el-color-danger) 12%, transparent),
-    transparent 58%
-  );
-}
-
-.music-card-wrapper :deep(.card-title) {
-  font-size: 18px;
-}
-
-.music-card-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  min-height: 96px;
-  cursor: pointer;
-}
-
-.music-card-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.music-card-desc {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--el-text-color-secondary);
-}
-
-.music-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.music-action-btn {
-  padding: 6px 14px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 999px;
-  background-color: var(--el-bg-color);
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--el-text-color-regular);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease,
-    transform 0.16s ease;
-}
-
-.music-action-btn:hover {
-  color: var(--el-color-danger);
-  border-color: color-mix(in srgb, var(--el-color-danger) 45%, transparent);
-  background-color: color-mix(in srgb, var(--el-color-danger) 10%, transparent);
-  transform: translateY(-1px);
-}
-
-/*
- * 插画固定在卡片内部（原来是绝对定位 + 负偏移，超出了卡片的 overflow:hidden 被裁掉）；
- * 尺寸随卡片走，窄屏先缩插画、再让说明文字换行。
- */
-.music-card-img {
-  flex: 0 0 auto;
-  width: 104px;
-  height: 104px;
-  object-fit: contain;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.14));
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.music-card-wrapper:hover .music-card-img {
-  transform: translateY(-3px) scale(1.06);
-}
-
-@media (max-width: 768px) {
-  .music-card-content {
-    min-height: 0;
-    gap: 12px;
-  }
-
-  .music-card-img {
-    width: 76px;
-    height: 76px;
-  }
-
-  .music-card-desc {
-    font-size: 12.5px;
-  }
-
-  .music-actions {
-    gap: 8px;
-  }
-
-  .music-action-btn {
-    padding: 5px 11px;
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 420px) {
-  .music-card-img {
-    width: 58px;
-    height: 58px;
-  }
-}
 </style>

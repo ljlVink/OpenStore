@@ -11,7 +11,6 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const db = require('../database.cjs');
 const { UPSTREAM_USER_AGENT } = require('./config.cjs');
 /*
  * ---- 分享卡片（og / twitter meta）----
@@ -38,8 +37,6 @@ const PAGE_SHARE_META = {
     description: '发现最新、最热门的鸿蒙应用，探索 OpenStore 的精彩世界。',
     seoDescription: SITE_DEFAULT_DESCRIPTION
   },
-  '/music': { title: '音乐', description: '畅听海量音乐，发现你的专属歌单。' },
-  '/player': { title: '正在播放', description: '查看当前播放的歌曲、进度与播放队列。' },
   '/apps': { title: '应用', description: '浏览 OpenStore 全部应用，查找你需要的工具和游戏。' },
   '/updates': { title: '今日上新', description: '获取最新应用更新和新上架应用信息。' },
   '/topics': { title: '专题', description: '跟随专题逛鸿蒙生态，发现值得一试的应用。' },
@@ -50,7 +47,7 @@ const PAGE_SHARE_META = {
   '/rank/non-huawei': { title: '非华为榜', description: '探索非华为设备上的热门应用。' },
   '/app-cards': { title: '应用列表', description: '应用卡片列表。' },
   '/system-status': { title: '系统状态', description: '监控系统核心服务与接口状态。' },
-  '/submit': { title: '投稿', description: '提交鸿蒙应用或专题到 OpenStore。' },
+  '/submit': { title: '投稿', description: '提交鸿蒙应用或专题链接以请求上游收录。' },
   '/about': { title: '关于', description: '了解 OpenStore 的开发背景、技术栈和团队信息。' }
 };
 
@@ -153,118 +150,6 @@ const fetchAppShareCard = async (appId) => {
     if (card) card.upstreamInfo = info;
   } catch (error) {
     console.warn('[share-card] 应用信息查询失败：', appId, error.message);
-  }
-  writeShareCardCache(key, card);
-  return card;
-};
-
-/** 音乐页顶部那张图标（public/music.png），首页分享图和网站 logo 是两张图 */
-const MUSIC_HERO_LOGO = '/music.png';
-/** 音乐页顶部图标下面那行字，首页分享的副标题用的就是它 */
-const MUSIC_HERO_SUB = '每日推荐 · 歌单 · 排行榜，由此开启好心情 ~';
-
-/** 音乐页面上的分享图：首页用网易云封面，更多歌单用第一张歌单封面 */
-const MUSIC_SECTION_TITLES = {
-  radar: '雷达歌单',
-  recommend: '推荐歌单',
-  rank: '排行榜'
-};
-
-const MUSIC_SECTION_SOURCES = {
-  radar: { path: '/personalized?limit=50', pick: (payload) => (payload.result || [])[0] },
-  recommend: {
-    path: '/top/playlist/highquality?limit=50',
-    pick: (payload) => (payload.playlists || [])[0]
-  },
-  rank: { path: '/toplist', pick: (payload) => (payload.list || [])[0] }
-};
-
-/** 音乐首页（没在放歌）：分享图和副标题用页面上那张音乐图标 + 它下面那行字 */
-const musicHomeShareCard = () => ({
-  title: `${SITE_NAME} | 音乐`,
-  docTitle: `${SITE_NAME} | 音乐`,
-  description: MUSIC_HERO_SUB,
-  image: absoluteSiteAsset(MUSIC_HERO_LOGO) || SITE_LOGO_URL
-});
-
-/** 音乐页「更多歌单」：拿第一张歌单的封面和名字做分享卡片 */
-const fetchMusicSectionShareCard = async (view) => {
-  const source = MUSIC_SECTION_SOURCES[view];
-  if (!source) return null;
-
-  const key = `music-section:${view}`;
-  const cached = readShareCardCache(key);
-  if (cached !== undefined) return cached;
-
-  let card = null;
-  try {
-    const base = await pickMusicApiBase();
-    if (base) {
-      const data = await fetchUpstreamJson(`${base}${source.path}`);
-      const payload = data && data.data ? data.data : data;
-      const first = source.pick(payload || {});
-      const cover = first && (first.coverImgUrl || first.picUrl || first.cover);
-      if (first && first.name && cover) {
-        card = {
-          title: `${SITE_NAME} | ${MUSIC_SECTION_TITLES[view]}`,
-          docTitle: `${SITE_NAME} | ${MUSIC_SECTION_TITLES[view]}`,
-          description: clampShareText(first.name),
-          image: absoluteSiteAsset(preferPngForShare(cover)) || SITE_LOGO_URL
-        };
-      }
-    }
-  } catch (error) {
-    console.warn('[share-card] 歌单列表查询失败：', view, error.message);
-  }
-  writeShareCardCache(key, card);
-  return card;
-};
-
-/** 挑一个启用的音乐接口（和 /api/music/apis 的排序一致），用来查歌曲信息 */
-const pickMusicApiBase = () =>
-  new Promise((resolve) => {
-    db.get(
-      `SELECT url FROM music_apis WHERE enabled = 1
-       ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END, latency ASC, id ASC LIMIT 1`,
-      [],
-      (err, row) => {
-        const url = !err && row && row.url ? String(row.url).trim().replace(/\/$/, '') : '';
-        resolve(url);
-      }
-    );
-  });
-
-/** 正在播放 / 音乐页带上 ?track=<歌曲 id> 时：拿这首歌的歌名 + 歌手 + 封面做分享卡片 */
-const fetchTrackShareCard = async (trackId) => {
-  if (!trackId) return null;
-  const key = `track:${trackId}`;
-  const cached = readShareCardCache(key);
-  if (cached !== undefined) return cached;
-
-  let card = null;
-  try {
-    const base = await pickMusicApiBase();
-    if (base) {
-      const data = await fetchUpstreamJson(`${base}/song/detail?ids=${encodeURIComponent(trackId)}`);
-      const payload = data && data.data ? data.data : data;
-      const song = (payload && (payload.songs || payload.data || []))[0];
-      if (song && song.name) {
-        const artists = (song.ar || song.artists || [])
-          .map((a) => (a && a.name) || '')
-          .filter(Boolean)
-          .join(' / ');
-        const album = (song.al || song.album || {}).name || '';
-        const cover = (song.al || song.album || {}).picUrl || song.picUrl || '';
-        card = {
-          title: song.name,
-          docTitle: `${SITE_NAME} | ${song.name}`,
-          description: clampShareText([artists, album].filter(Boolean).join(' · ')),
-          image: absoluteSiteAsset(preferPngForShare(cover)) || SITE_LOGO_URL
-        };
-      }
-    }
-  } catch (error) {
-    console.warn('[share-card] 歌曲信息查询失败：', trackId, error.message);
   }
   writeShareCardCache(key, card);
   return card;
@@ -395,4 +280,4 @@ const applyCanonicalToHtml = (html, url) => {
   return html.replace('</head>', `${tag}\n</head>`);
 };
 
-module.exports = { SITE_ORIGIN, SITE_LOGO_URL, SITE_NAME, SITE_DEFAULT_DESCRIPTION, PAGE_SHARE_META, CRAWLER_UA_RE, absoluteSiteAsset, MUSIC_SECTION_TITLES, musicHomeShareCard, fetchMusicSectionShareCard, fetchTrackShareCard, fetchTopicShareCard, fetchAppShareCard, readShareShell, applyShareCardToHtml, applyCanonicalToHtml };
+module.exports = { SITE_ORIGIN, SITE_LOGO_URL, SITE_NAME, SITE_DEFAULT_DESCRIPTION, PAGE_SHARE_META, CRAWLER_UA_RE, absoluteSiteAsset, fetchTopicShareCard, fetchAppShareCard, readShareShell, applyShareCardToHtml, applyCanonicalToHtml };

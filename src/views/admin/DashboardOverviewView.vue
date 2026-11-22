@@ -45,12 +45,6 @@
             </div>
           </template>
           <div class="actions-grid">
-            <el-button type="primary" plain @click="$emit('switch-tab', 'apps')">
-              <el-icon><Grid /></el-icon> 管理应用
-            </el-button>
-            <el-button type="success" plain @click="$emit('switch-tab', 'articles')">
-              <el-icon><Edit /></el-icon> 发布文章
-            </el-button>
             <el-button type="warning" plain @click="$emit('switch-tab', 'announcements')">
               <el-icon><Bell /></el-icon> 发布公告
             </el-button>
@@ -63,7 +57,7 @@
             <el-button type="danger" plain @click="showBlockedApps = true">
               <el-icon><CircleClose /></el-icon> 异常应用
             </el-button>
-            <!-- 第 7 个按钮单独占一整行：进去看拦截记录、改警告页文案，也能一键触发真实拦截 -->
+            <!-- 脚本拦截单独占一整行 -->
             <el-button class="is-wide" type="danger" plain @click="showScriptGuardPreview = true">
               <el-icon><Lock /></el-icon> 脚本拦截
             </el-button>
@@ -116,7 +110,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onActivated, onDeactivated, onMounted, onBeforeUnmount } from 'vue';
-import { User, Grid, Edit, Bell, Setting, Warning, CircleClose, Connection, Location, Lock } from '@element-plus/icons-vue';
+import { User, Bell, Setting, Warning, CircleClose, Connection, Location, Lock } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 import { getAdminOverviewStats, getVisitorTrend, type AdminOverviewStats } from '../../services/admin';
 import LiveLogPanel from '../../components/LiveLogPanel.vue';
@@ -140,7 +134,6 @@ const stats = ref<AdminOverviewStats>({
   uniqueIpCount: 0,
   locationKinds: 0,
   appCount: 0,
-  feedbackCount: 0,
   commentCount: 0,
   articleCount: 0,
   systemUptime: 0,

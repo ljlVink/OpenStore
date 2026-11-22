@@ -1,8 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { onlyTrackQueryChanged, setupScrollMemory } from '../utils/route-scroll';
+import { setupScrollMemory } from '../utils/route-scroll';
 
 const HomeView = () => import('../views/HomeView.vue');
-const MusicView = () => import('../views/MusicView.vue');
 const LoginView = () => import('../views/LoginView.vue');
 const NotFoundView = () => import('../views/NotFoundView.vue');
 const TotalRankView = () => import('../views/TotalRankView.vue');
@@ -38,18 +37,6 @@ const router = createRouter({
         // 分享卡片副标题（人话版）；SEO 用的关键词描述保留在 index.html 的 name="description" 里
         description: '发现最新、最热门的鸿蒙应用，探索 OpenStore 的精彩世界。'
       }
-    },
-    {
-      path: '/music',
-      name: 'music',
-      component: MusicView,
-      meta: { title: '音乐', description: '畅听海量音乐，发现你的专属歌单。' }
-    },
-    {
-      path: '/player',
-      name: 'player',
-      component: () => import('../views/PlayerView.vue'),
-      meta: { title: '正在播放', description: '查看当前播放的歌曲、进度与播放队列。' }
     },
     {
       path: '/apps',
@@ -157,7 +144,7 @@ const router = createRouter({
       path: '/submit',
       name: 'submission',
       component: SubmissionView,
-      meta: { title: '投稿', description: '提交鸿蒙应用或专题到OpenStore。' }
+      meta: { title: '投稿', description: '提交鸿蒙应用或专题链接以请求上游收录。' }
     },
     {
       path: '/about',
@@ -185,13 +172,7 @@ const router = createRouter({
       path: '/admin/dashboard',
       name: 'admin-dashboard',
       component: AdminDashboardView,
-      meta: { title: '后台管理', requiresAuth: true, description: 'OpenStore后台管理系统，管理应用、用户和系统设置。' }
-    },
-    {
-      path: '/admin/feedbacks',
-      name: 'admin-feedbacks',
-      component: () => import('../views/admin/FeedbackAdminView.vue'),
-      meta: { title: '用户反馈', requiresAuth: true, description: '查看用户反馈' }
+      meta: { title: '后台管理', requiresAuth: true, description: 'OpenStore 后台管理系统，管理公告、评论和站点设置。' }
     },
     {
       path: '/admin/settings',
@@ -212,18 +193,9 @@ const router = createRouter({
       meta: { title: '404', description: '页面未找到。' }
     },
   ],
-  scrollBehavior(to, from, savedPosition) {
+  scrollBehavior(_to, _from, savedPosition) {
     if (savedPosition) {
       return savedPosition;
-    }
-    /*
-     * 同一页面里只有曲目变了时不重置滚动位置：播放页和音乐页切歌都会把 ?track= 同步到地址栏，
-     * 若是照常「回到顶部」，每点一次上一首 / 下一首，页面就被拽回顶上。
-     * 其它导航（换页面、切换 view 等 query）维持原来的行为。
-     * 返回 false 表示这次导航不要改动滚动位置。
-     */
-    if (to.path === from.path && onlyTrackQueryChanged(to.query, from.query)) {
-      return false;
     }
     return { top: 0 };
   },

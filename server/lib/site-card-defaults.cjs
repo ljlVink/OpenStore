@@ -15,7 +15,6 @@ module.exports = [
   { page: 'home', key: 'app-list', title: '应用搜索', sort_order: 60 },
 
   // 首页 · 系统页签
-  { page: 'system', key: 'music', title: '在线播放', sort_order: 10, style: { span: 24, accent: 'bg-red' } },
   { page: 'system', key: 'announcements', title: '公告', sort_order: 20, style: { span: 24, accent: 'bg-yellow' } },
   { page: 'system', key: 'apps', title: '应用', sort_order: 30, style: { span: 24, accent: 'bg-yellow' } },
   { page: 'system', key: 'friend_links', title: '友情链接', sort_order: 40, style: { span: 12, accent: 'bg-yellow' } },
@@ -30,5 +29,4 @@ module.exports = [
   { page: 'about', key: 'contributors', title: '鸣谢', sort_order: 35 },
   { page: 'about', key: 'changelogs', title: '更新日志', sort_order: 40 },
   { page: 'about', key: 'commits', title: '最近提交', sort_order: 50 },
-  { page: 'about', key: 'feedback', title: '意见反馈', sort_order: 60 },
 ];

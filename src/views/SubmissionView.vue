@@ -2,7 +2,7 @@
   <div class="submission-view">
     <header class="page-hero">
       <h1 class="page-hero-title">投稿</h1>
-      <p class="page-hero-desc">提交应用收录，或投稿你的侧载应用</p>
+      <p class="page-hero-desc">提交应用与专题收录</p>
     </header>
 
     <section class="panel">
@@ -10,20 +10,20 @@
         class="panel-head is-clickable"
         role="button"
         tabindex="0"
-        :aria-expanded="openPanels.collection"
-        @click="togglePanel('collection')"
-        @keydown.enter.prevent="togglePanel('collection')"
-        @keydown.space.prevent="togglePanel('collection')"
+        :aria-expanded="collectionExpanded"
+        @click="toggleCollection"
+        @keydown.enter.prevent="toggleCollection"
+        @keydown.space.prevent="toggleCollection"
       >
         <span class="panel-index">1</span>
         <div class="panel-text">
           <h2 class="panel-title">提交收录</h2>
         </div>
-        <el-icon class="panel-caret" :class="{ 'is-open': openPanels.collection }"><ArrowDown /></el-icon>
+        <el-icon class="panel-caret" :class="{ 'is-open': collectionExpanded }"><ArrowDown /></el-icon>
       </div>
 
       <el-collapse-transition>
-        <div v-show="openPanels.collection" class="panel-body">
+        <div v-show="collectionExpanded" class="panel-body">
         <el-form :model="form" label-position="top">
         <el-form-item label="提交类型">
           <el-radio-group v-model="form.type">
@@ -205,89 +205,15 @@
         </div>
       </el-collapse-transition>
     </section>
-
-    <section class="panel">
-      <div
-        class="panel-head is-clickable"
-        role="button"
-        tabindex="0"
-        :aria-expanded="openPanels.submission"
-        @click="togglePanel('submission')"
-        @keydown.enter.prevent="togglePanel('submission')"
-        @keydown.space.prevent="togglePanel('submission')"
-      >
-        <span class="panel-index">2</span>
-        <div class="panel-text">
-          <h2 class="panel-title">应用投稿</h2>
-        </div>
-        <el-icon class="panel-caret" :class="{ 'is-open': openPanels.submission }"><ArrowDown /></el-icon>
-      </div>
-
-      <el-collapse-transition>
-        <div v-show="openPanels.submission" class="panel-body">
-        <el-form
-          :model="submitForm"
-          label-position="top"
-          v-if="submissionStep === 'edit'"
-          class="submit-form"
-        >
-        <el-form-item label="投稿类型">
-          <el-tag type="warning" size="small">侧载 / 测试类型</el-tag>
-        </el-form-item>
-        <div class="form-grid">
-          <el-form-item label="应用名称">
-            <el-input v-model="submitForm.name" placeholder="请输入应用名称" clearable />
-          </el-form-item>
-          <el-form-item label="应用提供者">
-            <el-input v-model="submitForm.provider" placeholder="请输入应用提供者" clearable />
-          </el-form-item>
-          <el-form-item label="图标 URL">
-            <el-input v-model="submitForm.icon_url" placeholder="请输入图标 URL" clearable />
-          </el-form-item>
-          <el-form-item label="背景 URL">
-            <el-input v-model="submitForm.bg_url" placeholder="请输入背景 URL" clearable />
-          </el-form-item>
-          <el-form-item label="下载链接" class="form-grid-full">
-            <el-input v-model="submitForm.download_url" placeholder="请输入下载链接" clearable />
-          </el-form-item>
-        </div>
-        <div class="submit-actions">
-          <el-button type="primary" :icon="Check" @click="saveForPreview">保存并预览</el-button>
-        </div>
-        </el-form>
-
-        <div v-else class="preview-section">
-          <el-alert
-            title="请确认投稿信息"
-            type="info"
-            description="仔细检查下方应用卡片预览效果，确认无误后点击提交。"
-            show-icon
-            :closable="false"
-            class="preview-alert"
-          />
-
-          <div class="preview-card-wrapper">
-            <AppDetailCard :item="previewData" :is-detail="true" />
-          </div>
-
-          <div class="submit-actions is-center">
-            <el-button :icon="Back" @click="backToEdit">返回修改</el-button>
-            <el-button type="primary" :loading="submitting" :icon="Check" @click="submitApp">确认提交</el-button>
-          </div>
-        </div>
-        </div>
-      </el-collapse-transition>
-    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Link, Back, Check, ArrowDown } from '@element-plus/icons-vue';
+import { Link, ArrowDown } from '@element-plus/icons-vue';
 import { hmApi } from '../services/hm-api';
-import { getTopicDetail, submitAppSubmission } from '../services/api';
-import AppDetailCard from '../components/AppDetailCard.vue';
+import { getTopicDetail } from '../services/api';
 
 type SubmittedAppInfo = {
   icon_url?: string;
@@ -311,10 +237,9 @@ type SubmittedAppInfo = {
 const parsing = ref(false);
 const topicParsing = ref(false);
 
-// 两个面板可展开/折叠，提交收录默认展开
-const openPanels = reactive({ collection: true, submission: false });
-const togglePanel = (key: 'collection' | 'submission') => {
-  openPanels[key] = !openPanels[key];
+const collectionExpanded = ref(true);
+const toggleCollection = () => {
+  collectionExpanded.value = !collectionExpanded.value;
 };
 
 const form = reactive({
@@ -331,9 +256,6 @@ const appForm = reactive({
 const submittedAppInfo = ref<SubmittedAppInfo | null>(null);
 const parsedSubstance = ref<any | null>(null);
 const topicApps = ref<SubmittedAppInfo[]>([]);
-const submitting = ref(false);
-const submissionStep = ref<'edit' | 'preview'>('edit');
-const previewData = ref<any>(null);
 
 let debounceTimer: number | undefined;
 let requestSeq = 0;
@@ -341,14 +263,6 @@ let lastFetchKey = '';
 let substanceDebounceTimer: number | undefined;
 let substanceRequestSeq = 0;
 let lastSubstanceKey = '';
-
-const submitForm = reactive({
-  name: '',
-  provider: '',
-  bg_url: '',
-  icon_url: '',
-  download_url: ''
-});
 
 const getStatusTagType = (raw: any) => {
   const s = String(raw || '').trim();
@@ -525,64 +439,6 @@ const parseSubstanceComment = (raw: any) => {
   }
 
   return { remark: text, platform: '', user: '' };
-};
-
-const normalizeSubmitPayload = () => ({
-  name: String(submitForm.name || '').trim(),
-  provider: String(submitForm.provider || '').trim(),
-  bg_url: String(submitForm.bg_url || '').trim(),
-  icon_url: String(submitForm.icon_url || '').trim(),
-  download_url: String(submitForm.download_url || '').trim()
-});
-
-const validateSubmitPayload = (payload: ReturnType<typeof normalizeSubmitPayload>) => {
-  if (!payload.name) return '请输入应用名称';
-  if (!payload.provider) return '请输入应用提供者';
-  if (!payload.bg_url) return '请输入背景URL';
-  if (!payload.icon_url) return '请输入图标URL';
-  if (!payload.download_url) return '请输入下载链接';
-  return '';
-};
-
-const saveForPreview = () => {
-  const payload = normalizeSubmitPayload();
-  const error = validateSubmitPayload(payload);
-  if (error) {
-    ElMessage.error(error);
-    return;
-  }
-  previewData.value = payload;
-  submissionStep.value = 'preview';
-};
-
-const backToEdit = () => {
-  submissionStep.value = 'edit';
-};
-
-const submitApp = async () => {
-  if (submitting.value) return;
-  const payload = previewData.value || normalizeSubmitPayload(); // Use preview data if available
-  const error = validateSubmitPayload(payload);
-  if (error) {
-    ElMessage.error(error);
-    return;
-  }
-  submitting.value = true;
-  try {
-    await submitAppSubmission(payload);
-    ElMessage.success('提交成功，等待审核');
-    submitForm.name = '';
-    submitForm.provider = '';
-    submitForm.bg_url = '';
-    submitForm.icon_url = '';
-    submitForm.download_url = '';
-    submissionStep.value = 'edit';
-    previewData.value = null;
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '提交失败');
-  } finally {
-    submitting.value = false;
-  }
 };
 
 const runPool = async <T>(items: T[], limit: number, worker: (item: T) => Promise<void>) => {
@@ -1233,38 +1089,6 @@ const handleSubstanceInput = (value: string) => {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- 投稿表单 ---------- */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 16px;
-}
-
-.form-grid-full {
-  grid-column: 1 / -1;
-}
-
-.submit-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.submit-actions.is-center {
-  justify-content: center;
-  margin-top: 24px;
-}
-
-.preview-alert {
-  margin-bottom: 20px;
-}
-
-.preview-card-wrapper {
-  display: flex;
-  justify-content: center;
-}
-
 :deep(.el-input__wrapper),
 :deep(.el-input) {
   max-width: 100%;
@@ -1286,10 +1110,6 @@ const handleSubstanceInput = (value: string) => {
 
   .panel-body {
     padding: 14px;
-  }
-
-  .form-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   /* 窄屏省掉下载量，避免行内太挤 */

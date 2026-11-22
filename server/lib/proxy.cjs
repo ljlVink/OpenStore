@@ -1,7 +1,7 @@
 /*
  * 通用反向代理。
  *
- * /api/v0 与 /api/proxy-request 都走这里：把请求原样透传给上游、把响应流式回吐，
+ * /api/v0 走这里：把请求原样透传给上游、把响应流式回吐，
  * 同时往实时日志里记一条 kind=upstream 的记录（拓扑图据此画「上游 API」节点）。
  */
 const axios = require('axios');

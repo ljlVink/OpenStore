@@ -42,9 +42,6 @@ const AXIOS_DEFAULT_MAX_CONTENT_LENGTH = positive(
 const API_STREAM_IDLE_MS = positive(process.env.API_STREAM_IDLE_MS, 30000);
 /** 接口类转发：单次传输总时长上限 */
 const API_STREAM_MAX_MS = positive(process.env.API_STREAM_MAX_MS, 120000);
-/** 媒体类转发（可达数百 MB，慢速客户端是常态）：余量放宽 */
-const MEDIA_STREAM_IDLE_MS = positive(process.env.MEDIA_STREAM_IDLE_MS, 120000);
-const MEDIA_STREAM_MAX_MS = positive(process.env.MEDIA_STREAM_MAX_MS, 900000);
 /** SSE 长流的空闲超时：SSE 没数据不代表出问题，给宽；主要靠「客户端断开即掐断」兜底 */
 const SSE_IDLE_MS = positive(process.env.SSE_IDLE_MS, 900000);
 
@@ -283,8 +280,6 @@ module.exports = {
   AXIOS_DEFAULT_MAX_CONTENT_LENGTH,
   API_STREAM_IDLE_MS,
   API_STREAM_MAX_MS,
-  MEDIA_STREAM_IDLE_MS,
-  MEDIA_STREAM_MAX_MS,
   SSE_IDLE_MS,
   PROXY_MAX_CONCURRENCY,
   PROXY_QUEUE_WAIT_MS,

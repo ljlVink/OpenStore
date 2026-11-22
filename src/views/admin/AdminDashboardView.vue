@@ -155,16 +155,12 @@
   import { goBackOrHome } from '../../utils/route-scroll';
 import {
   DataLine,
-  Grid,
   Bell,
-  Document,
   ChatLineSquare,
   Picture,
   InfoFilled,
-  Connection,
   Link,
   ChatDotRound,
-  Message,
   View,
   List,
   Coin,
@@ -181,21 +177,17 @@ import {
   import BrandMark from '../../components/BrandMark.vue';
 
   /*
-   * 面板一律按需加载：管理端里文章/公告/关于/更新日志都带 Quill + markdown 渲染器，
+   * 面板一律按需加载：管理端里公告/关于/更新日志都带 Quill + markdown 渲染器，
    * 访客/系统日志带 echarts，全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
    * （实测一次加载 240+ 个模块请求、12MB 左右）。改成异步组件后，只加载当前面板需要的那部分。
    */
   const DashboardOverviewView = defineAsyncComponent(() => import('./DashboardOverviewView.vue'));
-  const AppsAdminView = defineAsyncComponent(() => import('./AppsAdminView.vue'));
   const AnnouncementsView = defineAsyncComponent(() => import('./AnnouncementsView.vue'));
-  const ArticlesAdminView = defineAsyncComponent(() => import('./ArticlesAdminView.vue'));
   const CommentsAdminView = defineAsyncComponent(() => import('./CommentsAdminView.vue'));
   const SiteCardsAdminView = defineAsyncComponent(() => import('./SiteCardsAdminView.vue'));
   const AboutManageView = defineAsyncComponent(() => import('./AboutManageView.vue'));
-  const MusicApisAdminView = defineAsyncComponent(() => import('./MusicApisAdminView.vue'));
   const FriendLinksView = defineAsyncComponent(() => import('./FriendLinksView.vue'));
   const GroupChatsView = defineAsyncComponent(() => import('./GroupChatsView.vue'));
-  const FeedbackAdminView = defineAsyncComponent(() => import('./FeedbackAdminView.vue'));
   const VisitorLogsView = defineAsyncComponent(() => import('./VisitorLogsView.vue'));
   const DatabaseAdminView = defineAsyncComponent(() => import('./DatabaseAdminView.vue'));
   const SystemLogsView = defineAsyncComponent(() => import('./SystemLogsView.vue'));
@@ -209,9 +201,7 @@ type PaneKey =
   | 'overview'
   | 'links'
   | 'groups'
-  | 'apps'
   | 'announcements'
-  | 'articles'
   | 'comments'
   | 'env'
   | 'visitors'
@@ -220,16 +210,14 @@ type PaneKey =
   | 'site-cards'
   | 'about'
   | 'incidents'
-  | 'music-apis'
-  | 'feedbacks'
   | 'database'
   | 'seo'
   | 'settings';
 
 const PANE_KEYS: PaneKey[] = [
-  'overview', 'links', 'groups', 'apps', 'announcements', 'articles', 'comments', 'env',
-  'visitors', 'logs', 'changelogs', 'site-cards', 'about', 'incidents', 'music-apis',
-  'feedbacks', 'database', 'seo', 'settings'
+  'overview', 'links', 'groups', 'announcements', 'comments', 'env',
+  'visitors', 'logs', 'changelogs', 'site-cards', 'about', 'incidents',
+  'database', 'seo', 'settings'
 ];
 
 const route = useRoute();
@@ -248,12 +236,9 @@ const active = ref<PaneKey>(paneFromQuery());
 // 面板 → 组件：全部挂载着，非当前面板加 is-parked 隐藏，切回来不重新请求
 const PANE_COMPONENTS: Record<PaneKey, Component> = {
   overview: DashboardOverviewView,
-  'music-apis': MusicApisAdminView,
   links: FriendLinksView,
   groups: GroupChatsView,
-  apps: AppsAdminView,
   announcements: AnnouncementsView,
-  articles: ArticlesAdminView,
   comments: CommentsAdminView,
   env: EnvManagerView,
   incidents: IncidentsAdminView,
@@ -263,7 +248,6 @@ const PANE_COMPONENTS: Record<PaneKey, Component> = {
   visitors: VisitorLogsView,
   database: DatabaseAdminView,
   logs: SystemLogsView,
-  feedbacks: FeedbackAdminView,
   seo: SeoSubmitView,
   settings: SystemSettingsView
 };
@@ -306,16 +290,12 @@ const warmUpRestPanes = () => {
 // 面板标题：侧边栏只显示名称，这里补一行标题 + 一句提示，让右侧内容有明确的落点
 const SECTIONS: Record<string, { title: string; hint: string }> = {
   overview: { title: '数据总览', hint: '访问、内容与实时服务状态' },
-  apps: { title: '应用管理', hint: '应用上下架与审核' },
   announcements: { title: '公告管理', hint: '公告分类与发布' },
-  articles: { title: '文章管理', hint: '分类、标签与文章' },
   comments: { title: '评论管理', hint: '评论审核与筛选' },
   'site-cards': { title: '首页配置', hint: '各页面卡片与拖拽排序' },
   about: { title: '关于页面', hint: '站点信息、技术栈与页面内容' },
-  'music-apis': { title: '接口管理', hint: '第三方接口与可用性检测' },
   links: { title: '链接管理', hint: '友情链接' },
   groups: { title: '群聊管理', hint: '群聊信息' },
-  feedbacks: { title: '用户反馈', hint: '提交记录与限频' },
   visitors: { title: '访客日志', hint: '访问记录与筛选' },
   database: { title: '数据管理', hint: '表数据、维护、备份与只读查询' },
   logs: { title: '系统日志', hint: '后台操作记录' },
@@ -334,9 +314,7 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
   {
     title: '内容',
     items: [
-      { key: 'apps', label: '应用管理', icon: Grid },
       { key: 'announcements', label: '公告管理', icon: Bell },
-      { key: 'articles', label: '文章管理', icon: Document },
       { key: 'comments', label: '评论管理', icon: ChatLineSquare },
       { key: 'site-cards', label: '首页配置', icon: Picture },
       { key: 'about', label: '关于页面', icon: InfoFilled },
@@ -345,10 +323,8 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
   {
     title: '运营',
     items: [
-      { key: 'music-apis', label: '接口管理', icon: Connection },
       { key: 'links', label: '链接管理', icon: Link },
       { key: 'groups', label: '群聊管理', icon: ChatDotRound },
-      { key: 'feedbacks', label: '用户反馈', icon: Message },
     ],
   },
   {
@@ -932,8 +908,7 @@ const handleSwitchTab = (tabName: any) => {
 @media (min-width: 901px) {
   /* toolbar--tabs（应用管理的“新增应用”）不进标题行，它留在卡片页签行里 */
   .admin-pane :deep(.admin-view > .toolbar:first-child:not(.toolbar--tabs)),
-  .admin-pane :deep(.admin-view > .text-right:first-child),
-  .admin-pane :deep(.music-apis-admin > .toolbar:first-child) {
+  .admin-pane :deep(.admin-view > .text-right:first-child) {
     position: absolute;
     top: -48px;
     right: 0;

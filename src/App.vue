@@ -3,21 +3,16 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useThemeStore } from './stores/theme';
 import { useLayoutStore } from './stores/layout';
-import { usePlayerStore } from './stores/player';
 import { useRouter, useRoute } from 'vue-router';
-import PlayerBar from './components/PlayerBar.vue';
 import RankNavigation from './components/RankNavigation.vue';
 import BrandMark from './components/BrandMark.vue';
-import { waitForRouteChange } from './utils/route-change';
 import { goBackOrHome } from './utils/route-scroll';
-import { morphNavigate } from './utils/player-morph';
-import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, Edit, InfoFilled, CaretRight, Document } from '@element-plus/icons-vue';
+import { Moon, Sunny, ArrowLeft, Compass, Menu, Refresh, Collection, Close, Monitor, Edit, InfoFilled, Document } from '@element-plus/icons-vue';
 import { useAuthStore } from './stores/auth';
 import { applyPageMeta, pageShareMeta } from './utils/page-share';
 
 const themeStore = useThemeStore();
 const layoutStore = useLayoutStore();
-const playerStore = usePlayerStore();
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -151,46 +146,6 @@ const isAdminDashboard = computed(() => shellPath.value.startsWith('/admin/dashb
 const isAdminRoute = computed(() => shellPath.value.startsWith('/admin'));
 /** 四个榜单页共用一条页签条（见模板里的 .rank-nav-shell） */
 const isRankRoute = computed(() => shellPath.value.startsWith('/rank'));
-/** 音乐页不展示 Dock：把底部这块位置让给迷你播放条 */
-const isMusicRoute = computed(() => shellPath.value === '/music');
-/** 播放页同样是「播放态」页面，也不展示 Dock（页面本身就是播放器） */
-const isPlaybackRoute = computed(() => isMusicRoute.value || shellPath.value === '/player');
-/**
- * 播放页：沉浸式的深色页面。
- * 顶栏的主题切换按钮在这里没有意义（页面强制深色），所以隐藏掉。
- */
-const isPlayerPage = computed(() => shellPath.value === '/player');
-/**
- * 有歌在放时，桌面端把整条 Dock 收成移动端那种紧凑按钮，
- * 迷你播放器保持原样，单独留在左下角完整显示。
- */
-const isDockCollapsed = computed(() => !!playerStore.currentTrack);
-
-/**
- * 迷你播放条：
- * - 桌面端所有前台页面通用（播放页本身就是播放器，不再叠一条）；
- * - 移动端只在音乐页出现 —— 那页没有 dock 也没有紧凑按钮，否则底部就没有播放器了；
- *   其他页面继续用右下角那颗带唱片的紧凑按钮。
- */
-const showPlayerBar = computed(
-  () =>
-    !isAdminRoute.value &&
-    shellPath.value !== '/player' &&
-    (isDesktopViewport.value || isMusicRoute.value)
-);
-
-watch(isDockCollapsed, () => {
-  nextTick(updateSlider);
-  nextTick(measureDock);
-});
-
-/*
- * 进入播放页强制深色、离开恢复用户原本的偏好。
- * 用 store 里的「强制」开关而不是改 preference：后者会把深色写进 localStorage，
- * 用户下次直接打开播放页时偏好就被永久改成深色了。
- */
-watch(isPlayerPage, (onPlayerPage) => themeStore.setForcedDark(onPlayerPage), { immediate: true });
-
 const activeTab = computed(() => (shellPath.value.startsWith('/articles') ? '/articles' : shellPath.value));
 
 const navItems = [
@@ -218,30 +173,6 @@ const sliderReady = ref(false);
 /** dock 本体同理：首次摆放（等价的空跳）不上过渡 */
 const dockReady = ref(false);
 
-
-/** 桌面宽度：迷你播放条只在桌面端出现，移动端保持原来那颗唱片按钮 */
-const isDesktopViewport = ref(true);
-const syncViewport = () => {
-  isDesktopViewport.value = window.innerWidth > 480;
-};
-
-// Mini Player Logic（移动端紧凑按钮里的唱片）
-const radius = 14;
-const circumference = 2 * Math.PI * radius;
-const strokeDashoffset = computed(() => {
-  if (!playerStore.duration) return circumference;
-  const progress = playerStore.currentTime / playerStore.duration;
-  return circumference - (progress * circumference);
-});
-
-const togglePlay = () => {
-  playerStore.togglePlay();
-};
-
-const playProgress = computed(() => {
-  if (!playerStore.duration || !playerStore.currentTrack) return 0;
-  return (playerStore.currentTime / playerStore.duration) * 100;
-});
 
 const updateSlider = () => {
   const activeIndex = navItems.findIndex(item => item.path === activeTab.value);
@@ -330,8 +261,6 @@ onMounted(() => {
   }));
   window.addEventListener('resize', updateSlider);
   window.addEventListener('resize', measureDock);
-  syncViewport();
-  window.addEventListener('resize', syncViewport);
   window.addEventListener('scroll', handleGlobalScroll, { passive: true });
   syncHeaderScrolled();
   // 字体/图标就位后胶囊宽度可能变一点，重新量一次基准
@@ -342,7 +271,6 @@ onUnmounted(() => {
   if (dockEnterTimer) clearTimeout(dockEnterTimer);
   if (dockLeaveTimer) clearTimeout(dockLeaveTimer);
   window.removeEventListener('resize', updateSlider);
-  window.removeEventListener('resize', syncViewport);
   window.removeEventListener('resize', measureDock);
   window.removeEventListener('scroll', handleGlobalScroll);
   if (headerScrollRaf) window.cancelAnimationFrame(headerScrollRaf);
@@ -391,9 +319,7 @@ watch(
   () => {
     // 专题 / 文章详情页正文里已经有标题了，顶栏不再重复显示
     const isDetailPage = /^\/(topics|articles)\/[^/]+$/.test(route.path);
-    // 播放页正文本身就是「正在播放」，顶栏同样不用再挂一个标题
-    const hideHeaderTitle = isDetailPage || route.path === '/player';
-    const title = hideHeaderTitle ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
+    const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'OpenStore');
     const isRoot = ['/', '/apps', '/updates', '/topics', '/submit', '/articles', '/about'].includes(route.path);
     /*
      * 榜单页之间可以互相跳（顶部那排页签），这时浏览器历史里前一条就是「上一个榜单」，
@@ -426,24 +352,7 @@ watch(pageShareMeta, () => {
   });
 });
 
-/*
- * 顶栏返回：从播放页返回时也走共享元素转场 —— 大唱片会收回到底部的迷你播放器里，
- * 和展开过去时对称。其它页面保持原来的返回行为。
- */
 const handleBack = () => {
-  if (isPlayerPage.value) {
-    void morphNavigate('fromPlayer', async () => {
-      /*
-       * 这里必须等导航真正完成再让浏览器拍「新快照」：
-       * router.back() 返回 void，导航发生在稍后的 popstate 里，
-       * 不等的话新快照拍到的还是播放页，退场就没有补间动画了。
-       */
-      const navigated = waitForRouteChange(router);
-      layoutStore.backAction();
-      await navigated;
-    });
-    return;
-  }
   layoutStore.backAction();
 };
 
@@ -530,8 +439,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
       </div>
       
       <div class="header-right">
-        <!-- 播放页是强制深色的沉浸式页面，这里不提供主题切换 -->
-        <el-button v-if="!isPlayerPage" :icon="themeIcon" circle @click="handleThemeToggle" />
+        <el-button :icon="themeIcon" circle @click="handleThemeToggle" />
       </div>
     </el-header>
     <el-main class="main-content" :class="{ 'main-content--overflow-visible': isAdminDashboard }">
@@ -550,7 +458,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           漏掉某个页面时它只是走回原来的「每次重新加载」，不会出错。
         -->
         <keep-alive
-          include="HomeView,MusicView,PlayerView,AppsView,UpdatesView,TopicView,TotalRankView,GrowthRankView,HistoryRankView,NonHuaweiRankView,CategoryRankView,AppCardView,ArticlesView,AboutView,SubmissionView,SystemStatusView,ArticleDetailView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
+          include="HomeView,AppsView,UpdatesView,TopicView,TotalRankView,GrowthRankView,HistoryRankView,NonHuaweiRankView,CategoryRankView,AppCardView,ArticlesView,AboutView,SubmissionView,SystemStatusView,ArticleDetailView,TopicDetailView,UpdatesAppDetailView,AppDashboardView,NextAppDetailView"
           :max="30"
         >
           <component :is="Component" :key="route.path" />
@@ -558,7 +466,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
       </router-view>
     </el-main>
     <div
-      v-if="!isAdminRoute && !isPlaybackRoute && !isDockCollapsed"
+      v-if="!isAdminRoute"
       ref="dockWrapperRef"
       class="dock-wrapper desktop-nav"
       :class="{ 'is-stacked': isDockStacked, 'is-ready': dockReady }"
@@ -575,14 +483,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
         宽窗口下 Teleport 关掉，节点还在主胶囊里，靠右展开那套逻辑一行不用改。
       -->
       <div ref="subPortalRef" class="dock-sub-portal"></div>
-      <div v-if="!isDockCollapsed" ref="footerNavRef" class="footer-nav">
-        <!-- Dock Progress Bar -->
-        <div 
-          class="dock-progress-bar" 
-          :style="{ width: `${playProgress}%` }"
-          v-if="playerStore.currentTrack"
-        ></div>
-
+      <div ref="footerNavRef" class="footer-nav">
         <div class="nav-slider" :class="{ 'is-ready': sliderReady }" :style="sliderStyle"></div>
         <div 
           v-for="(item, index) in navItems"
@@ -602,7 +503,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
         -->
         <Teleport :to="subPortalRef" :disabled="!isDockStacked || !subPortalRef">
           <div
-            v-if="!isDockCollapsed"
             ref="subDockRef"
             class="sub-dock-nav"
             :class="{ 'is-visible': isDockHovered }"
@@ -623,14 +523,10 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
       </div>
     </div>
 
-    <!-- 迷你播放条：所有前台页面通用（播放页本身就是播放器，不再叠一条） -->
-    <PlayerBar v-if="showPlayerBar" />
-
     <!-- Mobile Navigation -->
     <div
-      v-if="!isAdminRoute && !isPlaybackRoute"
+      v-if="!isAdminRoute"
       class="mobile-nav-container"
-      :class="{ 'is-desktop': isDockCollapsed, 'is-above-bar': showPlayerBar }"
     >
       <!-- Popup Menu -->
       <transition name="mobile-menu-fade">
@@ -683,42 +579,13 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
         </div>
       </transition>
 
-      <!--
-        Trigger Button：移动端播放时这里就是迷你播放器（唱片 + 播放/暂停）；
-        桌面端播放条由底部的 PlayerBar 承担，这里退化成导航入口。
-      -->
+      <!-- 移动端导航入口 -->
       <div
         class="mobile-trigger-btn"
-        :class="{ 'has-player': playerStore.currentTrack && !isDesktopViewport }"
         @click="toggleMobileMenu"
         ref="mobileTriggerRef"
       >
-        <div
-          class="trigger-logo player-trigger"
-          v-if="playerStore.currentTrack && !isDesktopViewport"
-          @click.stop="togglePlay"
-        >
-           <svg class="progress-ring" width="32" height="32">
-             <circle
-               class="progress-ring__circle"
-               stroke="var(--el-color-primary)"
-               stroke-width="2"
-               fill="transparent"
-               r="14"
-               cx="16"
-               cy="16"
-               :style="{ strokeDasharray: `${circumference} ${circumference}`, strokeDashoffset: strokeDashoffset }"
-             />
-           </svg>
-           <div class="mini-cover-wrapper">
-             <img :src="playerStore.currentTrack.al?.picUrl || playerStore.currentTrack.album?.picUrl || playerStore.currentTrack.picUrl" class="mini-cover" :class="{ spinning: playerStore.isPlaying }" />
-             <div class="play-status-icon" v-if="!playerStore.isPlaying">
-               <el-icon :size="12"><CaretRight /></el-icon>
-             </div>
-           </div>
-        </div>
-
-        <div class="trigger-logo" v-else>
+        <div class="trigger-logo">
            <el-icon :size="20" class="current-tab-icon">
              <component :is="activeIcon" />
            </el-icon>
@@ -1007,18 +874,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   border: 1px solid var(--el-border-color);
   border-radius: 50px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-  overflow: hidden; /* Ensure progress bar doesn't overflow rounded corners */
-}
-
-.dock-progress-bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--el-color-primary) 15%, transparent);
-  pointer-events: none;
-  z-index: 0;
-  transition: width 0.2s linear;
+  overflow: hidden;
 }
 
 .sub-dock-nav {
@@ -1115,13 +971,9 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   display: none;
 }
 
-/* 浮层要探出胶囊外，所以叠放模式下不裁剪胶囊；进度条自己带圆角补回来 */
+/* 浮层要探出胶囊外，所以叠放模式下不裁剪胶囊 */
 .dock-wrapper.is-stacked .footer-nav {
   overflow: visible;
-}
-
-.dock-wrapper.is-stacked .dock-progress-bar {
-  border-radius: 50px;
 }
 
 /*
@@ -1258,10 +1110,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   display: none;
 }
 
-/*
- * 紧凑导航按钮：窄屏默认就用它；桌面端在「有歌在放」时把 Dock 收成同一个按钮，
- * 底部的位置让给迷你播放器。
- */
+/* 窄屏使用紧凑导航按钮 */
 @media (max-width: 480px) {
   .desktop-nav {
     display: none !important;
@@ -1272,96 +1121,11 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   }
 }
 
-.mobile-nav-container.is-desktop {
-  display: block;
-}
-
 .mobile-nav-container {
   position: fixed;
   bottom: 24px;
   right: 24px;
   z-index: 2100;
-}
-
-/* 桌面端播放中：菜单按内容宽度排，别为几个字撑出一大块 */
-.mobile-nav-container.is-desktop .mobile-menu-popup {
-  width: max-content;
-  min-width: 0;
-}
-
-/* 桌面端播放条占了底部，紧凑按钮抬到它上面，避免叠在一起 */
-.mobile-nav-container.is-above-bar {
-  bottom: 92px;
-}
-
-/* 移动端播放时，按钮里显示的是唱片本身（原样保留） */
-.mobile-trigger-btn.has-player {
-  padding-left: 8px;
-}
-
-.player-trigger {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 0;
-}
-
-.progress-ring {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform: rotate(-90deg);
-  pointer-events: none;
-}
-
-.progress-ring__circle {
-  transition: stroke-dashoffset 0.1s linear;
-  transform-origin: 50% 50%;
-}
-
-.mini-cover-wrapper {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-  background-color: var(--el-fill-color-darker);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mini-cover {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.mini-cover.spinning {
-  animation: spin 10s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.play-status-icon {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  backdrop-filter: blur(2px);
 }
 
   .mobile-trigger-btn {

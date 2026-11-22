@@ -31,8 +31,7 @@ router.get('/api/env', requireAuth, (req, res) => {
     rows.forEach(r => {
       const cat = r.category || categorizeKey(r.key);
       if (!result[cat]) result[cat] = [];
-      const val = r.key === 'FEEDBACK_RATE_LIMIT_PER_MINUTE' ? decrypt(r.value_encrypted) : '••••••';
-      result[cat].push({ key: r.key, value: val, secure: true, updated_at: r.updated_at });
+      result[cat].push({ key: r.key, value: '••••••', secure: true, updated_at: r.updated_at });
     });
     res.json(result);
   });
@@ -41,8 +40,7 @@ router.get('/api/env', requireAuth, (req, res) => {
 router.put('/api/env', requireAuth, (req, res) => {
   const { key, value, category, secure = true } = req.body;
   if (!key) return res.status(400).json({ error: 'key required' });
-  const isRateLimit = key === 'FEEDBACK_RATE_LIMIT_PER_MINUTE';
-  if (secure || isRateLimit) {
+  if (secure) {
     const enc = encrypt(String(value || ''));
     db.get(`SELECT value_encrypted FROM env_vars WHERE key=?`, [key], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -55,9 +53,7 @@ router.put('/api/env', requireAuth, (req, res) => {
       db.run(upsert, params, function(e2){
         if (e2) return res.status(500).json({ error: e2.message });
         db.run(`INSERT INTO env_history (key, old_value_encrypted, new_value_encrypted) VALUES (?,?,?)`, [key, oldEnc, enc]);
-        if (!isRateLimit) {
-          writeEnvKey(key, String(value || ''));
-        }
+        writeEnvKey(key, String(value || ''));
         logAction(req.user?.username, 'env_set', 'env_vars', null, { key });
         res.json({ ok: true });
       });
@@ -90,9 +86,7 @@ router.post('/api/env/rollback', requireAuth, (req, res) => {
     const enc = row.old_value_encrypted;
     db.run(`UPDATE env_vars SET value_encrypted=?, category=?, updated_at=CURRENT_TIMESTAMP WHERE key=?`, [enc, cat, row.key], function(e2){
       if (e2) return res.status(500).json({ error: e2.message });
-      if (row.key !== 'FEEDBACK_RATE_LIMIT_PER_MINUTE') {
-        writeEnvKey(row.key, plain);
-      }
+      writeEnvKey(row.key, plain);
       logAction(req.user?.username, 'env_rollback', 'env_vars', null, { id });
       res.json({ ok: true });
     });

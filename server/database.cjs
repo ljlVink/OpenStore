@@ -199,22 +199,6 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS blog_versions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    blog_id INTEGER NOT NULL,
-    title TEXT,
-    content_html TEXT,
-    content_markdown TEXT,
-    summary TEXT,
-    cover_url TEXT,
-    author_names TEXT,
-    status TEXT,
-    seo_title TEXT,
-    seo_description TEXT,
-    seo_keywords TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
   db.run(`CREATE TABLE IF NOT EXISTS env_vars (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT NOT NULL UNIQUE,
@@ -253,18 +237,6 @@ db.serialize(() => {
     entity_id INTEGER,
     payload TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS music_apis (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    type TEXT DEFAULT 'netease',
-    status TEXT DEFAULT 'unknown',
-    latency INTEGER DEFAULT 0,
-    enabled INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS incidents (
@@ -335,55 +307,6 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS app_submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    provider TEXT,
-    bg_url TEXT,
-    icon_url TEXT,
-    download_url TEXT,
-    type TEXT DEFAULT 'sideload',
-    status TEXT DEFAULT 'pending',
-    user_id INTEGER,
-    user_ip TEXT,
-    review_note TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at DATETIME,
-    reviewer_id INTEGER
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS feedbacks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    device_type TEXT,
-    os TEXT,
-    browser TEXT,
-    network TEXT,
-    page_url TEXT,
-    user_role TEXT,
-    email TEXT,
-    ip TEXT,
-    user_agent TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.all(`PRAGMA table_info(feedbacks)`, [], (err, cols) => {
-    if (err) return console.error('Failed to inspect feedbacks table:', err);
-    const names = Array.isArray(cols) ? cols.map(c => c.name) : [];
-    if (!names.includes('hash')) {
-      db.run(`ALTER TABLE feedbacks ADD COLUMN hash TEXT`, [], (e2) => {
-        if (e2) console.error('Failed to add hash column to feedbacks:', e2);
-      });
-    }
-    if (!names.includes('status')) {
-      db.run(`ALTER TABLE feedbacks ADD COLUMN status TEXT DEFAULT 'pending'`, [], (e3) => {
-        if (e3) console.error('Failed to add status column to feedbacks:', e3);
-      });
-    }
-  });
-
   db.run(`CREATE TABLE IF NOT EXISTS site_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     page TEXT NOT NULL DEFAULT 'home',
@@ -397,6 +320,8 @@ db.serialize(() => {
   )`);
 
   const seedSiteCards = () => {
+    db.run(`DELETE FROM site_cards WHERE page = 'about' AND key = 'feedback'`);
+    db.run(`DELETE FROM site_cards WHERE page = 'system' AND key = 'music'`);
     defaultSiteCards.forEach(card => {
       db.run(
         `INSERT OR IGNORE INTO site_cards (page, key, title, sort_order, style) VALUES (?, ?, ?, ?, ?)`,
@@ -618,7 +543,6 @@ db.serialize(() => {
   ensureColumn('about_page', 'tech_stack', 'TEXT');
   ensureColumn('about_page', 'social_links', 'TEXT');
   ensureColumn('about_page', 'contributors', 'TEXT');
-  ensureColumn('app_submissions', 'review_note', 'TEXT');
   ensureColumn('blogs', 'content_markdown', 'TEXT');
   ensureColumn('blogs', 'summary', 'TEXT');
   ensureColumn('blogs', 'cover_url', 'TEXT');

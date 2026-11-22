@@ -7,8 +7,6 @@ export declare const AXIOS_DEFAULT_TIMEOUT_MS: number;
 export declare const AXIOS_DEFAULT_MAX_CONTENT_LENGTH: number;
 export declare const API_STREAM_IDLE_MS: number;
 export declare const API_STREAM_MAX_MS: number;
-export declare const MEDIA_STREAM_IDLE_MS: number;
-export declare const MEDIA_STREAM_MAX_MS: number;
 export declare const SSE_IDLE_MS: number;
 export declare const PROXY_MAX_CONCURRENCY: number;
 export declare const PROXY_QUEUE_WAIT_MS: number;

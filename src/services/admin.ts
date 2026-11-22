@@ -207,123 +207,6 @@ export const offlineAnnouncement = async (id: number) => {
   await api.post(`/announcements/${id}/offline`);
 };
 
-export interface BlogCategory { id: number; name: string; parent_id?: number | null; }
-export interface BlogTag { id: number; name: string; color?: string | null; group_name?: string | null; usage_count?: number; }
-export interface Blog {
-  id: number;
-  title: string;
-  slug: string;
-  content_html?: string | null;
-  content_markdown?: string | null;
-  summary?: string | null;
-  cover_url?: string | null;
-  cover_focus?: string | null;
-  author_names?: string | null;
-  status: 'draft' | 'published' | 'offline';
-  category_id?: number | null;
-  category_name?: string | null;
-  seo_title?: string | null;
-  seo_description?: string | null;
-  seo_keywords?: string | null;
-  password?: string | null;
-  /** 后台列表只返回这个标记，不再返回明文密码或哈希 */
-  has_password?: number | boolean | null;
-  allow_comments?: number | null;
-  scheduled_at?: string | null;
-  published_at?: string | null;
-  updated_at?: string | null;
-  tag_ids?: string | number[] | null;
-  tag_names?: string | null;
-  tag_colors?: string | null;
-  app_ids?: string | number[] | null;
-}
-export interface BlogVersion {
-  id: number;
-  blog_id: number;
-  title?: string | null;
-  content_html?: string | null;
-  content_markdown?: string | null;
-  summary?: string | null;
-  cover_url?: string | null;
-  author_names?: string | null;
-  status?: string | null;
-  seo_title?: string | null;
-  seo_description?: string | null;
-  seo_keywords?: string | null;
-  created_at?: string | null;
-}
-
-export const getBlogCategories = async () => {
-  const { data } = await api.get('/blog-categories');
-  return data.items as BlogCategory[];
-};
-export const createBlogCategory = async (payload: Partial<BlogCategory>) => {
-  const { data } = await api.post('/blog-categories', payload);
-  return data.id as number;
-};
-export const updateBlogCategory = async (id: number, payload: Partial<BlogCategory>) => {
-  await api.put(`/blog-categories/${id}`, payload);
-};
-export const deleteBlogCategory = async (id: number) => {
-  await api.delete(`/blog-categories/${id}`);
-};
-
-export const getBlogTags = async () => {
-  const { data } = await api.get('/blog-tags');
-  return data.items as BlogTag[];
-};
-export const createBlogTag = async (payload: Partial<BlogTag>) => {
-  const { data } = await api.post('/blog-tags', payload);
-  return data.id as number;
-};
-export const updateBlogTag = async (id: number, payload: Partial<BlogTag>) => {
-  await api.put(`/blog-tags/${id}`, payload);
-};
-export const deleteBlogTag = async (id: number) => {
-  await api.delete(`/blog-tags/${id}`);
-};
-
-export const getBlogs = async (
-  params: {
-    status?: string;
-    search?: string;
-    page?: number;
-    pageSize?: number;
-    category_id?: number;
-    tag_id?: number;
-  } = {}
-) => {
-  const { data } = await api.get('/blogs', { params });
-  return data as { items: Blog[]; total: number; page: number; pageSize: number };
-};
-export const createBlog = async (payload: Partial<Blog> & { tag_ids?: number[]; app_ids?: number[] }) => {
-  const { data } = await api.post('/blogs', payload);
-  return data.id as number;
-};
-export const updateBlog = async (id: number, payload: Partial<Blog> & { tag_ids?: number[]; app_ids?: number[] }) => {
-  await api.put(`/blogs/${id}`, payload);
-};
-export const deleteBlog = async (id: number) => {
-  await api.delete(`/blogs/${id}`);
-};
-export const publishBlog = async (id: number) => {
-  await api.post(`/blogs/${id}/publish`);
-};
-export const offlineBlog = async (id: number) => {
-  await api.post(`/blogs/${id}/offline`);
-};
-export const getBlogVersions = async (id: number) => {
-  const { data } = await api.get(`/blogs/${id}/versions`);
-  return data.items as BlogVersion[];
-};
-export const createBlogVersion = async (id: number, payload: Partial<BlogVersion>) => {
-  const { data } = await api.post(`/blogs/${id}/versions`, payload);
-  return data.id as number;
-};
-export const restoreBlogVersion = async (id: number, versionId: number) => {
-  await api.post(`/blogs/${id}/restore`, { version_id: versionId });
-};
-
 // Apps
 export interface AppItem {
   id: number;
@@ -334,62 +217,6 @@ export interface AppItem {
   download_url?: string | null;
   enabled: number;
 }
-export const getApps = async () => {
-  const { data } = await api.get('/apps');
-  return data.items as AppItem[];
-};
-export const searchApps = async (params: { q?: string; ids?: number[]; limit?: number } = {}) => {
-  const query: Record<string, any> = {};
-  if (params.q) query.q = params.q;
-  if (params.ids && params.ids.length) query.ids = params.ids.join(',');
-  if (typeof params.limit !== 'undefined') query.limit = params.limit;
-  const { data } = await api.get('/apps/search', { params: query });
-  return data.items as AppItem[];
-};
-export const createApp = async (payload: Partial<AppItem>) => {
-  const { data } = await api.post('/apps', payload);
-  return data.id as number;
-};
-export const updateApp = async (id: number, payload: Partial<AppItem>) => {
-  await api.put(`/apps/${id}`, payload);
-};
-export const deleteApp = async (id: number) => {
-  await api.delete(`/apps/${id}`);
-};
-
-export interface AppSubmission {
-  id: number;
-  name: string;
-  provider?: string | null;
-  bg_url?: string | null;
-  icon_url?: string | null;
-  download_url?: string | null;
-  type?: string | null;
-  status?: string | null;
-  user_id?: number | null;
-  user_ip?: string | null;
-  review_note?: string | null;
-  created_at?: string | null;
-  reviewed_at?: string | null;
-  reviewer_id?: number | null;
-}
-
-export const getAppSubmissions = async (params: { status?: string } = {}) => {
-  const { data } = await api.get('/submissions', { params });
-  return data.items as AppSubmission[];
-};
-
-export const approveAppSubmission = async (id: number, note?: string) => {
-  await api.post(`/submissions/${id}/approve`, note ? { note } : {});
-};
-
-export const rejectAppSubmission = async (id: number, note?: string) => {
-  await api.post(`/submissions/${id}/reject`, note ? { note } : {});
-};
-
-export const updateAppSubmission = async (id: number, payload: Partial<AppSubmission>) => {
-  await api.put(`/submissions/${id}`, payload);
-};
 
 // ENV management
 export type EnvItem = {
@@ -708,41 +535,6 @@ export const downloadDatabaseBackup = async () => {
   window.URL.revokeObjectURL(url);
 };
 
-export interface MusicApi {
-  id: number;
-  name: string;
-  url: string;
-  type: string;
-  status: 'active' | 'error' | 'unknown';
-  latency: number;
-  enabled: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export const getAdminMusicApis = async () => {
-  const { data } = await api.get('/music/apis');
-  return data.items as MusicApi[];
-};
-
-export const createMusicApi = async (payload: Partial<MusicApi>) => {
-  const { data } = await api.post('/music/apis', payload);
-  return data as { id: number };
-};
-
-export const updateMusicApi = async (id: number, payload: Partial<MusicApi>) => {
-  await api.put(`/music/apis/${id}`, payload);
-};
-
-export const deleteMusicApi = async (id: number) => {
-  await api.delete(`/music/apis/${id}`);
-};
-
-export const checkMusicApi = async (id?: number) => {
-  const { data } = await api.post('/music/apis/check', { id });
-  return data;
-};
-
 // Site Cards
 export interface SiteCard {
   id: number;
@@ -785,39 +577,6 @@ export const getPublicSiteCards = async (page?: string, options?: { includeDisab
     params: Object.keys(params).length ? params : undefined,
   });
   return data.items as SiteCard[];
-};
-
-export interface Feedback {
-  id: number;
-  type: string;
-  title: string;
-  description: string;
-  device_type?: string | null;
-  os?: string | null;
-  browser?: string | null;
-  network?: string | null;
-  page_url?: string | null;
-  user_role?: string | null;
-  email?: string | null;
-  ip?: string | null;
-  user_agent?: string | null;
-  hash?: string | null;
-  status?: string | null;
-  created_at: string;
-}
-
-export const getFeedbacks = async (page = 1, pageSize = 20) => {
-  const { data } = await api.get('/feedbacks', { params: { page, pageSize } });
-  return data as { items: Feedback[]; total: number; page: number; pageSize: number };
-};
-
-export const deleteFeedbacks = async (ids: number[]) => {
-  const { data } = await api.post('/feedbacks/batch-delete', { ids });
-  return data as { deleted: number };
-};
-
-export const updateFeedback = async (id: number, data: { status?: 'pending' | 'accepted' | 'rejected' | 'completed'; title?: string; description?: string }) => {
-  await api.put(`/feedbacks/${id}`, data);
 };
 
 export interface Comment {
@@ -891,7 +650,6 @@ export interface AdminOverviewStats {
   /** 覆盖地区数（同上） */
   locationKinds: number;
   appCount: number;
-  feedbackCount: number;
   commentCount: number;
   articleCount: number;
   systemUptime: number;

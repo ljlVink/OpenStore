@@ -44,10 +44,6 @@ const {
   PAGE_SHARE_META,
   CRAWLER_UA_RE,
   absoluteSiteAsset,
-  MUSIC_SECTION_TITLES,
-  musicHomeShareCard,
-  fetchMusicSectionShareCard,
-  fetchTrackShareCard,
   fetchTopicShareCard,
   fetchAppShareCard,
   readShareShell,
@@ -373,15 +369,8 @@ app.use(async (req, res, next) => {
         ? String(req.query.app_id || '')
         : '';
   const topicId = topicMatch ? decodeURIComponent(topicMatch[1]) : '';
-  // 正在播放 / 音乐页：地址上带 ?track=<歌曲 id> 时，分享卡片用这首歌
-  const trackId =
-    cleanPath === '/player' || cleanPath === '/music' ? String(req.query.track || '').trim() : '';
-  // 音乐页的「更多歌单」列表（?view=radar|recommend|rank）：分享卡片用第一张歌单的封面
-  const requestedView = String(req.query.view || '').trim();
-  const musicSection =
-    cleanPath === '/music' && MUSIC_SECTION_TITLES[requestedView] ? requestedView : '';
 
-  if (!appId && !appCardMatch && !topicId && !trackId && !pageMeta) return next();
+  if (!appId && !appCardMatch && !topicId && !pageMeta) return next();
 
   const shell = await readShareShell();
   if (!shell) return next();
@@ -399,23 +388,6 @@ app.use(async (req, res, next) => {
         ? { title: `应用数据面板 - ${SITE_NAME}`, description: '查看应用的下载、评分与版本趋势。' }
         : { title: `应用详情 - ${SITE_NAME}`, description: '查看应用详细信息、评分、版本与更新历史。' };
     card = appCard || { ...fallback, image: SITE_LOGO_URL };
-  } else if (musicSection) {
-    const sectionCard = isCrawler ? await fetchMusicSectionShareCard(musicSection) : null;
-    card = sectionCard || {
-      title: `${SITE_NAME} | ${MUSIC_SECTION_TITLES[musicSection]}`,
-      description: '畅听海量音乐，发现你的专属歌单。',
-      image: SITE_LOGO_URL
-    };
-  } else if (trackId) {
-    const trackCard = isCrawler ? await fetchTrackShareCard(trackId) : null;
-    card = trackCard || {
-      title: `${SITE_NAME} | ${pageMeta ? pageMeta.title : '正在播放'}`,
-      description: '一边听歌一边逛应用市场。',
-      image: SITE_LOGO_URL
-    };
-  } else if (cleanPath === '/music') {
-    // 音乐首页没在放歌：图用页面上那张网易云封面，副标题用图旁边那行字
-    card = musicHomeShareCard();
   } else if (topicId) {
     const topicCard = isCrawler ? await fetchTopicShareCard(topicId) : null;
     card = topicCard || {
@@ -635,7 +607,7 @@ const mountRouter = (name, router) => {
 };
 
 mountRouter('admin-ops', require('./routes/admin-ops.cjs')({ collectPerfCheckRoutes })); // 数据新鲜度 / 全接口体检 / 调用拓扑 / 访客洞察 / 重放 / 应用总览 / 屏蔽应用
-mountRouter('proxy', require('./routes/proxy.cjs'));          // 上游代理：/api/v0 透传、/api/proxy-request、/api/music-proxy
+mountRouter('proxy', require('./routes/proxy.cjs'));          // 上游代理：/api/v0 透传
 mountRouter('media', require('./routes/media.cjs'));          // 应用截图同源代理、文件上传、上传目录
 mountRouter('monitors', require('./routes/monitors.cjs'));    // UptimeRobot 监控状态
 mountRouter('visitors', require('./routes/visitors.cjs'));    // 访客日志：列表 / 趋势 / 单 IP 历史 / 导出
@@ -643,14 +615,11 @@ mountRouter('database', require('./routes/database.cjs'));    // 数据库管理
 mountRouter('friend-links', require('./routes/friend-links.cjs')); // 友情链接
 mountRouter('group-chats', require('./routes/group-chats.cjs'));   // 群聊
 mountRouter('incidents', require('./routes/incidents.cjs'));  // 服务事故 / 维护公告
-mountRouter('apps-read', require('./routes/apps-read.cjs'));  // 应用列表（后台）
 mountRouter('comments', require('./routes/comments.cjs'));    // 评论
-mountRouter('apps-admin', require('./routes/apps-admin.cjs'));     // 应用 CRUD
 mountRouter('public-content', require('./routes/public-content.cjs')); // 前台公开内容：应用 / 公告 / 文章
-mountRouter('content-admin', require('./routes/content-admin.cjs'));   // 内容管理：公告、文章、分类标签
+mountRouter('content-admin', require('./routes/content-admin.cjs'));   // 公告与公告分类
 mountRouter('changelogs', require('./routes/changelogs.cjs'));     // 更新日志
 mountRouter('diagnostics', require('./routes/diagnostics.cjs'));   // 客户端 IP 诊断
-mountRouter('submissions', require('./routes/submissions.cjs'));   // 应用投稿与问题反馈
 mountRouter('site', require('./routes/site.cjs'));           // 站点卡片 / 关于页
 mountRouter('env-logs', require('./routes/env-logs.cjs'));    // 环境变量 / 操作日志
 /*
@@ -672,16 +641,6 @@ setInterval(() => {
       const t = new Date(r.scheduled_at).getTime();
       if (t && t <= now) {
         db.run(`UPDATE announcements SET status='published', published_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [r.id]);
-      }
-    });
-  });
-  db.all(`SELECT id, scheduled_at FROM blogs WHERE status='draft' AND scheduled_at IS NOT NULL`, [], (err, rows) => {
-    if (err || !rows) return;
-    const now = Date.now();
-    rows.forEach(r => {
-      const t = new Date(r.scheduled_at).getTime();
-      if (!isNaN(t) && t <= now) {
-        db.run(`UPDATE blogs SET status='published', published_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [r.id]);
       }
     });
   });
@@ -755,13 +714,13 @@ db.get(`SELECT id FROM users WHERE username=?`, ['admin'], (err, row) => {
 
 // 登录相关接口（原文件里就排在定时任务 / 建管理员账号之后）
 mountRouter('auth', require('./routes/auth.cjs'));            // 登录 / 刷新 token / 改密码 / 后台概览
-mountRouter('music-settings', require('./routes/music-settings.cjs'));  // 音乐 API 配置 / 站点设置
+mountRouter('settings', require('./routes/settings.cjs'));    // 站点与主题设置
 
 /*
  * /api/admin 的兜底鉴权闸门：处理未被前面业务路由接住的 /api/admin 请求。
  *
  * 仅作兜底 —— 排在它前面的业务路由会先响应，闸门不会执行，
- * 因此对外的后台路由（music-settings、seo）各自在路由内声明 requireAuth。
+ * 因此对外的后台路由（settings、seo）各自在路由内声明 requireAuth。
  *
  * req.url 只补回 /api：app.use 已剥掉 /api/admin。若补全 /api/admin，
  * 二次分发时 router 会再剥一次同一前缀，导致自我重入至栈溢出。
@@ -774,6 +733,8 @@ app.use('/api/admin', (req, res, next) => {
   });
 });
 
+// 未匹配的 API 不回退到前端页面。
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 // SPA Fallback - Must be last
 app.get(/(.*)/, (req, res) => {

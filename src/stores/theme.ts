@@ -32,19 +32,8 @@ export const useThemeStore = defineStore('theme', () => {
     mediaQuery.addListener(handleSystemChange);
   }
 
-  /*
-   * 「强制深色」：某些页面（例如播放页）固定用深色。
-   * 刻意不去改 preference —— 那样会把强制值写进 localStorage，
-   * 用户直接刷新播放页时偏好就被永久改成深色了。这里只影响当前渲染。
-   */
-  const forcedDark = ref(false);
-  const setForcedDark = (value: boolean) => {
-    forcedDark.value = value;
-  };
-
   // Computed: is the dark mode actually active?
   const isDark = computed(() => {
-    if (forcedDark.value) return true;
     if (preference.value === 'auto') {
       return systemDark.value;
     }
@@ -107,7 +96,7 @@ export const useThemeStore = defineStore('theme', () => {
   };
 
   // Watch for changes in preference or systemDark to apply theme
-  watch([preference, systemDark, forcedDark], () => {
+  watch([preference, systemDark], () => {
     applyTheme();
     localStorage.setItem('theme_mode', preference.value);
   });
@@ -116,5 +105,5 @@ export const useThemeStore = defineStore('theme', () => {
   applyTheme();
   loadThemeSettings();
 
-  return { isDark, preference, toggleTheme, customTheme, loadThemeSettings, setForcedDark, forcedDark };
+  return { isDark, preference, toggleTheme, customTheme, loadThemeSettings };
 });

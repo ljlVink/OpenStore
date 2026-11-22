@@ -14,7 +14,4 @@ const verifyArticlePassword = (row, supplied) => {
   if (row.password) return input === String(row.password);
   return null; // 没有设密码
 };
-const articleHasPassword = (row) =>
-  Boolean((row.password_hash && String(row.password_hash).trim()) || (row.password && String(row.password).trim()));
-
-module.exports = { hashArticlePassword, verifyArticlePassword, articleHasPassword };
+module.exports = { hashArticlePassword, verifyArticlePassword };

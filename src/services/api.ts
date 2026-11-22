@@ -84,19 +84,6 @@ export interface Incident {
   updated_at: number;
 }
 
-export interface AppSubmissionPayload {
-  name: string;
-  provider: string;
-  bg_url: string;
-  icon_url: string;
-  download_url: string;
-}
-
-export const submitAppSubmission = async (payload: AppSubmissionPayload) => {
-  const { data } = await apiClient.post('/submissions', payload);
-  return data as { id: number };
-};
-
 export const getActiveIncidents = async (): Promise<Incident[]> => {
   try {
     const response = await apiClient.get('/public/incidents/active');
@@ -494,23 +481,9 @@ export interface AppItem {
   download_url?: string;
   enabled: number;
 }
-export const getApps = async (): Promise<AppItem[]> => {
-  const response = await apiClient.get('/apps');
-  return response.data.items || [];
-};
 export const getPublicApps = async (): Promise<AppItem[]> => {
   const response = await apiClient.get('/public/apps');
   return response.data.items || [];
-};
-export const createApp = async (data: Partial<AppItem>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/apps', data);
-  return response.data;
-};
-export const updateApp = async (id: number, data: Partial<AppItem>): Promise<void> => {
-  await apiClient.put(`/apps/${id}`, data);
-};
-export const deleteApp = async (id: number): Promise<void> => {
-  await apiClient.delete(`/apps/${id}`);
 };
 
 // Site Cards
@@ -604,50 +577,7 @@ export const login = async (username: string, password: string): Promise<{ token
   const response = await apiClient.post('/auth/login', { username, password });
   return response.data;
 };
-export interface FeedbackPayload {
-  type: string;
-  title: string;
-  description: string;
-  device_type?: string;
-  os?: string;
-  browser?: string;
-  network?: string;
-  page_url?: string;
-  user_role?: string;
-  email?: string;
-}
 
-export const submitFeedback = async (payload: FeedbackPayload): Promise<{ id: number; hash: string }> => {
-  const response = await apiClient.post('/feedback', payload);
-  return response.data;
-};
-
-export interface FeedbackProgress {
-  id: number;
-  type: string;
-  title: string;
-  status: string;
-  created_at: string;
-}
-
-export const getFeedbackProgressByHash = async (hash: string): Promise<FeedbackProgress> => {
-  const response = await apiClient.get(`/public/feedback/${encodeURIComponent(hash)}`);
-  return response.data;
-};
-
-export interface FeedbackSummary {
-  id: number;
-  type: string;
-  title: string;
-  status: string;
-  created_at: string;
-}
-export const getFeedbackSuccessList = async (limit = 10, status?: string): Promise<FeedbackSummary[]> => {
-  const params: any = { limit };
-  if (status) params.status = status;
-  const response = await apiClient.get('/public/feedbacks/success', { params });
-  return response.data.items || [];
-};
 // Upload
 export const uploadFile = async (file: File): Promise<{ url: string }> => {
   const formData = new FormData();
@@ -658,66 +588,6 @@ export const uploadFile = async (file: File): Promise<{ url: string }> => {
   return response.data;
 };
 
-// Music APIs
-export interface MusicApi {
-  id: number;
-  name: string;
-  url: string;
-  type: string;
-  status: 'active' | 'error' | 'unknown';
-  latency: number;
-  enabled: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export const getMusicApis = async (): Promise<MusicApi[]> => {
-  try {
-    const response = await apiClient.get('/music/apis');
-    return response.data.items || [];
-  } catch (error) {
-    console.error('Failed to fetch music apis', error);
-    return [];
-  }
-};
-
-export const getAdminMusicApis = async (): Promise<MusicApi[]> => {
-  const response = await apiClient.get('/admin/music/apis');
-  return response.data.items || [];
-};
-
-export const createMusicApi = async (data: Partial<MusicApi>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/admin/music/apis', data);
-  return response.data;
-};
-
-export const updateMusicApi = async (id: number, data: Partial<MusicApi>): Promise<void> => {
-  await apiClient.put(`/admin/music/apis/${id}`, data);
-};
-
-export const deleteMusicApi = async (id: number): Promise<void> => {
-  await apiClient.delete(`/admin/music/apis/${id}`);
-};
-
-export const checkMusicApi = async (id?: number): Promise<any> => {
-  const response = await apiClient.post('/admin/music/apis/check', { id });
-  return response.data;
-};
-
-export const proxyRequest = async (url: string, method: string = 'GET', headers: any = {}, data: any = null): Promise<any> => {
-  try {
-    const response = await apiClient.post('/proxy-request', {
-      url,
-      method,
-      headers,
-      data
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Proxy request failed', error);
-    throw error;
-  }
-};
 
 // Topics (Substances)
 export interface ShortSubstanceInfo {
