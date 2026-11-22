@@ -1,5 +1,4 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import { ref } from 'vue';
 import { translateAppsListCall } from './upstream-compat';
 
 interface CacheItem<T> {
@@ -29,9 +28,6 @@ class HmApiClient {
   /** 主线路最近一次失败时间；冷却期内先走备用线路，冷却结束再试主线路 */
   private primaryFailedAt = 0;
   private static readonly PRIMARY_COOLDOWN_MS = 60 * 1000;
-
-  public isLoading = ref(false);
-  private activeRequestCount = 0;
 
   constructor(config: HmApiClientConfig) {
     this.primaryBaseUrl = config.baseUrl;
@@ -95,23 +91,8 @@ class HmApiClient {
     return `${path}?${queryString}`;
   }
 
-  private startRequest() {
-    this.activeRequestCount++;
-    this.isLoading.value = true;
-  }
-
-  private endRequest() {
-    this.activeRequestCount--;
-    if (this.activeRequestCount <= 0) {
-      this.activeRequestCount = 0;
-      this.isLoading.value = false;
-    }
-  }
-
-  /** 缓存时长（毫秒）：列表 / 榜单 45s，行情 2min，图表 5min，其余不缓存 */
+  /** 缓存时长（毫秒）：列表 / 榜单 45s，其余不缓存 */
   private guessTtlMs(path: string): number {
-    if (path.includes('market_info')) return 120000; // 2 mins
-    if (path.includes('charts/')) return 300000; // 5 mins
     // 注：/rankings/top-downloads 已在上游 0.9.0 移除，不再需要缓存规则
     // 列表 / 榜单：应用列表、按条件查询的应用集、各类榜单
     if (path.includes('apps/list')) return LIST_TTL_MS;
@@ -148,28 +129,18 @@ class HmApiClient {
       return this.inFlight.get(cacheKey) as Promise<T>;
     }
 
-    const requestPromise = (async () => {
-      this.startRequest();
-      // /apps/list/<n> 统一翻译成 /apps/query（POST），避开被上游风控的接口
-      const translated = translateAppsListCall(normalizedPath, params);
-      const requestPath = translated ? translated.path : normalizedPath;
-
-      const send = (baseUrl: string) => {
-        const url = `${baseUrl}${requestPath}`;
-        return translated
-          ? axios.post<T>(url, translated.body, {
-              ...config,
-              headers: { 'Content-Type': 'application/json', ...(config?.headers || {}) }
-            })
-          : axios.get<T>(url, { ...config, params });
-      };
-
-      try {
-        return await this.sendWithFailover(requestPath, send);
-      } finally {
-        this.endRequest();
-      }
-    })();
+    // /apps/list/<n> 统一翻译成 /apps/query（POST），避开被上游风控的接口
+    const translated = translateAppsListCall(normalizedPath, params);
+    const requestPath = translated ? translated.path : normalizedPath;
+    const requestPromise = this.sendWithFailover(requestPath, (baseUrl) => {
+      const url = `${baseUrl}${requestPath}`;
+      return translated
+        ? axios.post<T>(url, translated.body, {
+            ...config,
+            headers: { 'Content-Type': 'application/json', ...(config?.headers || {}) }
+          })
+        : axios.get<T>(url, { ...config, params });
+    });
 
     this.inFlight.set(cacheKey, requestPromise);
 
@@ -200,14 +171,9 @@ class HmApiClient {
       }
     };
 
-    this.startRequest();
-    try {
-      return await this.sendWithFailover(normalizedPath, (baseUrl) =>
-        axios.post<T>(`${baseUrl}${normalizedPath}`, payload, finalConfig)
-      );
-    } finally {
-      this.endRequest();
-    }
+    return this.sendWithFailover(normalizedPath, (baseUrl) =>
+      axios.post<T>(`${baseUrl}${normalizedPath}`, payload, finalConfig)
+    );
   }
 }
 

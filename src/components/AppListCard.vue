@@ -1,7 +1,7 @@
 <template>
   <el-card class="app-list-card" shadow="hover">
     <template #header>
-      <!-- 头部整块可点：右侧箭头会转，内容是平滑收起而不是直接消失（和 SDK 分布卡片一致） -->
+      <!-- 点击整个标题栏可平滑展开或收起内容，右侧箭头会旋转 -->
       <header class="card-header" @click="toggleExpanded">
         <div class="header-left">
           <span class="card-title">应用搜索</span>
@@ -370,7 +370,6 @@ onUnmounted(() => {
   /* 放不下时整块换行（搜索栏自己有 100% 规则），别把左边的标题挤变形 */
   flex-wrap: wrap;
   gap: 10px 12px;
-  /* 整块可点：和 SDK 分布卡片一样，点标题栏展开 / 收起 */
   cursor: pointer;
 }
 .header-left {
@@ -398,7 +397,6 @@ onUnmounted(() => {
 }
 
 /*
- * 展开 / 收起：内容和 SDK 分布卡片一样平滑收起。
  * 行高动画用 grid-template-rows 0fr/1fr —— max-height 那种写法要猜一个大值，
  * 内容短的时候会先「卡住」再收，很难看。
  */

@@ -190,11 +190,8 @@ defineOptions({
 });
 
 import ActiveIncidents from '../components/ActiveIncidents.vue';
-import SystemStatusCard from '../components/SystemStatusCard.vue';
-import OverviewCard from '../components/OverviewCard.vue';
 import TopicSpotlight from '../components/TopicSpotlight.vue';
 import RankOverview from '../components/RankOverview.vue';
-import ChartDistributionRow from '../components/ChartDistributionRow.vue';
 import AppListSection from '../components/AppListSection.vue';
 import {
   getPublicAnnouncements,
@@ -240,14 +237,11 @@ const siteCards = ref<SiteCard[]>([]);
  * key 对应后台里的卡片标识，取不到配置时用下面的默认顺序兜底。
  */
 const HOME_SECTIONS: Record<string, Component> = {
-  'system-status': SystemStatusCard,
-  overview: OverviewCard,
   'topic-spotlight': TopicSpotlight,
   'rank-overview': RankOverview,
-  'chart-distribution': ChartDistributionRow,
   'app-list': AppListSection,
 };
-const HOME_CARD_FALLBACK = ['system-status', 'overview', 'topic-spotlight', 'rank-overview', 'chart-distribution', 'app-list'];
+const HOME_CARD_FALLBACK = ['topic-spotlight', 'rank-overview', 'app-list'];
 type HomeCardConfig = { key: string; rankVariant: 'classic' | 'stacked' | 'both'; rankOrder: 'stacked' | 'classic' };
 
 const fallbackHomeCards = (): HomeCardConfig[] =>

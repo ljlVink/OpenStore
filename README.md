@@ -410,7 +410,9 @@ sudo bash scripts/sysctl-openstore.sh --apply
     <img src="https://api.star-history.com/svg?repos=XiaoChuangll/OpenStore&type=date&theme=default" alt="Star History Chart" style="border-radius: 12px; max-width: 100%;">
   </a>
 </p>
+## 首页
 
+首页可配置的卡片为精选专题、榜单排行和应用搜索。可在后台「首页配置」调整卡片顺序和显隐。
 
 ## ❤️ 鸣谢
 
