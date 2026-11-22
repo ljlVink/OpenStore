@@ -161,7 +161,7 @@ const MARQUEE_COPIES = 3;
 
 const router = useRouter();
 const loading = ref(false);
-const topic = ref<FullSubstanceInfo | null>(null);
+const topic = ref<(FullSubstanceInfo & { created_at: string }) | null>(null);
 /** 加载失败的图标地址：换成兜底图标，避免一直挂破图 */
 const failedIcons = ref(new Set<string>());
 
@@ -389,9 +389,12 @@ const loadSpotlight = async () => {
       .slice(0, Math.min(SAMPLE_SIZE, list.length));
 
     const details = await Promise.all(
-      candidates.map((item) => getTopicDetail(item.substance_id).catch(() => null))
+      candidates.map(async (item) => {
+        const detail = await getTopicDetail(item.substance_id).catch(() => null);
+        return detail && { ...detail, created_at: item.created_at };
+      })
     );
-    const valid = details.filter((item): item is FullSubstanceInfo => !!item);
+    const valid = details.filter((item) => item !== null);
     if (!valid.length) {
       topic.value = null;
       return;

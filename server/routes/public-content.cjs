@@ -1,8 +1,9 @@
 /*
- * 前台公开内容：应用 / 公告
+ * 前台公开内容：推荐应用、专题详情和公告
  */
 const express = require('express');
 const db = require('../database.cjs');
+const { getAppGalleryTopic } = require('../lib/appgallery-topics.cjs');
 
 const router = express.Router();
 
@@ -11,6 +12,17 @@ router.get('/api/public/apps', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
+});
+
+router.get('/api/public/topics/:id', async (req, res) => {
+  try {
+    const topic = await getAppGalleryTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: '专题不存在或已下架' });
+    res.json(topic);
+  } catch (error) {
+    console.warn('[appgallery-topics] 专题查询失败：', req.params.id, error.message);
+    res.status(502).json({ error: '无法加载华为应用市场专题' });
+  }
 });
 
 // Public announcements

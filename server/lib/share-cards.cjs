@@ -4,13 +4,14 @@
  * 规则：
  *   - 栏目页（探索 / 应用 / 专题 / 更新 / 榜单 / 关于…）：带网站 logo + 该栏目自己的标题、描述
  *   - 信息页（应用详情、更新详情、应用面板、专题详情）：带当前页面的资源图片（应用图标 / 专题首图）与文字
- * 栏目页只做字符串替换；信息页只有抓取器才会去查上游（30 分钟内存缓存 + 5s 超时），
+ * 栏目页只做字符串替换；信息页只有抓取器才会去查上游，应用和专题各自缓存。
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { UPSTREAM_USER_AGENT } = require('./config.cjs');
+const { getAppGalleryTopic } = require('./appgallery-topics.cjs');
 /*
  * ---- 分享卡片（og / twitter meta）----
  * 微信、QQ、Twitter、Telegram 这类抓取器不执行 JS，卡片的图和文案必须在服务端就写好。
@@ -153,39 +154,20 @@ const fetchAppShareCard = async (appId) => {
 
 /** 专题里没有封面图，用第一个应用的图标当资源图片 */
 const fetchTopicShareCard = async (topicId) => {
-  if (!topicId) return null;
-  const key = `topic:${topicId}`;
-  const cached = readShareCardCache(key);
-  if (cached !== undefined) return cached;
-
-  let card = null;
   try {
-    const data = await fetchUpstreamJson(`${SHARE_UPSTREAM_BASE}/api/v0/substance/${encodeURIComponent(topicId)}`);
-    const topic = (data && data.data ? data.data : data) || {};
-    if (topic.title) {
-      let comment = topic.comment;
-      if (typeof comment === 'string') {
-        try {
-          comment = JSON.parse(comment);
-        } catch {
-          comment = null;
-        }
-      }
-      const firstIcon = (topic.apps || [])
-        .map((app) => app && (app.icon_url || (app.info && app.info.icon_url)))
-        .find((url) => typeof url === 'string' && url);
-      card = {
-        title: topic.title,
-        docTitle: `${SITE_NAME} | ${topic.title}`,
-        description: clampShareText(topic.subtitle || comment?.description || ''),
-        image: absoluteSiteAsset(preferPngForShare(firstIcon)) || SITE_LOGO_URL
-      };
-    }
+    const topic = await getAppGalleryTopic(topicId);
+    if (!topic) return null;
+    const firstIcon = topic.apps.find((app) => app.icon_url)?.icon_url;
+    return {
+      title: topic.title,
+      docTitle: `${SITE_NAME} | ${topic.title}`,
+      description: clampShareText(topic.subtitle || topic.description),
+      image: absoluteSiteAsset(preferPngForShare(firstIcon)) || SITE_LOGO_URL
+    };
   } catch (error) {
     console.warn('[share-card] 专题信息查询失败：', topicId, error.message);
+    return null;
   }
-  writeShareCardCache(key, card);
-  return card;
 };
 
 // dist/index.html 读一次缓存 60s，部署换包后最多 1 分钟生效

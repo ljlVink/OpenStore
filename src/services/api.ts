@@ -425,14 +425,10 @@ export interface ShortAppInfo {
   name: string;
   pkg_name: string;
   icon_url: string;
-  create_at: string;
-  developer_name?: string;
 }
 
-export interface FullSubstanceInfo extends ShortSubstanceInfo {
-  name?: string | null;
-  /** 上游返回的可能是纯文本，也可能是 { platform, user } 这样的投稿元数据对象 */
-  comment?: string | Record<string, unknown> | null;
+export interface FullSubstanceInfo extends Pick<ShortSubstanceInfo, 'substance_id' | 'title' | 'subtitle'> {
+  description: string;
   apps: ShortAppInfo[];
 }
 
@@ -475,28 +471,8 @@ export const getTopics = async (page: number = 1, pageSize: number = 20): Promis
 };
 
 export const getTopicDetail = async (substanceId: string): Promise<FullSubstanceInfo> => {
-  try {
-    const response = await apiClient.get(`/v0/substance/${substanceId}`);
-    
-    let data = response.data;
-
-    if (data && data.data) {
-      data = data.data;
-    }
-    
-    if (data && Array.isArray(data.apps)) {
-      data.apps = data.apps.map((app: any) => app.info || app);
-    }
-    
-    if (!data) {
-      throw new Error('No data received');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Failed to fetch topic detail', error);
-    throw error;
-  }
+  const { data } = await apiClient.get<FullSubstanceInfo>(`/public/topics/${encodeURIComponent(substanceId)}`);
+  return data;
 };
 
 export const getThemeSettings = async (): Promise<Record<string, string>> => {

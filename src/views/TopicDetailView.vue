@@ -67,20 +67,12 @@
 
           <div class="hero-meta">
             <span class="meta-chip">
-              <el-icon><Calendar /></el-icon>
-              {{ formatDate(topic.created_at) }}
-            </span>
-            <span class="meta-chip">
               <el-icon><Collection /></el-icon>
               {{ appCount }} 个应用
             </span>
-            <span v-if="submitter" class="meta-chip is-quiet">
-              <el-icon><User /></el-icon>
-              {{ submitter }}
-            </span>
           </div>
 
-          <p v-if="description" class="hero-description">{{ description }}</p>
+          <p v-if="topic.description" class="hero-description">{{ topic.description }}</p>
         </div>
       </section>
 
@@ -106,13 +98,14 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { isAxiosError } from 'axios';
 import { useRoute, useRouter } from 'vue-router';
 import { getTopicDetail, type FullSubstanceInfo } from '../services/api';
 import AppCard from '../components/AppCard.vue';
 import { useLayoutStore } from '../stores/layout';
 import { goBackOrHome } from '../utils/route-scroll';
 import { clearPageShareMeta, setPageShareMeta } from '../utils/page-share';
-import { Calendar, Collection, Picture, User } from '@element-plus/icons-vue';
+import { Collection, Picture } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -151,57 +144,6 @@ const heroRows = computed(() => {
 });
 const heroCopies = computed(() => (heroMarquee.value ? HERO_MARQUEE_COPIES : 1));
 
-/**
- * 上游的 comment 字段经常是投稿元数据（例如 {"platform":"shenbot-0.9.1","user":"shenjack"}），
- * 而且 axios 已经把它解析成对象了，直接渲染会变成 [object Object]。
- * 这里统一拆开：真正的评论当作正文，投稿元数据只作为一行小字。
- */
-const parseComment = (raw: unknown) => {
-  const fromObject = (obj: Record<string, unknown>) => {
-    const comment = typeof obj.comment === 'string' ? obj.comment : '';
-    const text = typeof obj.text === 'string' ? obj.text : '';
-    const user = typeof obj.user === 'string' ? obj.user : '';
-    const platform = typeof obj.platform === 'string' ? obj.platform : '';
-    return {
-      description: (comment || text).trim(),
-      submitter: [user, platform].filter(Boolean).join(' · ')
-    };
-  };
-
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    return fromObject(raw as Record<string, unknown>);
-  }
-
-  const text = typeof raw === 'string' ? raw.trim() : '';
-  if (!text) return { description: '', submitter: '' };
-
-  if (text.startsWith('{') || text.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return fromObject(parsed as Record<string, unknown>);
-      }
-    } catch {
-      // 不是合法 JSON，按普通文本处理
-    }
-  }
-
-  return { description: text, submitter: '' };
-};
-
-const parsedComment = computed(() => parseComment(topic.value?.comment));
-const description = computed(() => parsedComment.value.description);
-const submitter = computed(() => parsedComment.value.submitter);
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-};
-
 const fetchDetail = async () => {
   const id = route.params.id as string;
   if (!id) return;
@@ -227,14 +169,18 @@ const fetchDetail = async () => {
     const firstIcon = (data.apps || []).map((a: any) => a?.icon_url).find((u: unknown) => typeof u === 'string' && u);
     setPageShareMeta({
       title,
-      description: data.subtitle || description.value || '',
+      description: data.subtitle || data.description,
       image: typeof firstIcon === 'string' ? firstIcon : '',
     });
 
     // meta / 分享描述由上面的 setPageShareMeta 统一写，这里不再单独改
-  } catch (err: any) {
-    console.error(err);
-    error.value = '无法加载专题详情，请稍后再试';
+  } catch (err) {
+    if (isAxiosError(err) && err.response?.status === 404) {
+      error.value = '该专题在华为应用市场已下架或不存在';
+    } else {
+      console.error(err);
+      error.value = '无法加载专题详情，请稍后再试';
+    }
   } finally {
     loading.value = false;
   }
@@ -523,12 +469,6 @@ html.dark .hero-icon:hover {
   background: var(--el-fill-color-light);
   font-size: 12.5px;
   color: var(--el-text-color-secondary);
-}
-
-.meta-chip.is-quiet {
-  background: transparent;
-  border-style: dashed;
-  color: var(--el-text-color-placeholder);
 }
 
 .hero-description {
