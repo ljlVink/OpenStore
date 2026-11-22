@@ -96,7 +96,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ArrowDown, Clock, Picture } from '@element-plus/icons-vue';
 import HarmonyShareIcon from '../components/HarmonyShareIcon.vue';
-import { hmApi } from '../services/hm-api';
+import { getAppDetail, type AppGalleryAppInfo, type AppGalleryVersion } from '../services/next-api';
 import { useLayoutStore } from '../stores/layout';
 import { useActiveScope } from '../utils/page-active';
 import { goBackOrHome } from '../utils/route-scroll';
@@ -109,22 +109,19 @@ const layoutStore = useLayoutStore();
 const loading = ref(false);
 const historyOpen = ref(true);
 
-const appDetail = ref<any>(null);
-const metrics = ref<any[]>([]);
+const appDetail = ref<AppGalleryAppInfo | null>(null);
+/** 最近 25 个版本（华为应用市场版本历史） */
+const versions = ref<AppGalleryVersion[]>([]);
 
 const appId = computed(() => String(route.params.id || '').trim());
 
-/** 应用简介（上游 brief_desc，短简介；不是详情里的长说明） */
-const briefText = computed(() => {
-  const detail = appDetail.value;
-  const raw = detail?.brief_desc ?? detail?.briefDesc ?? detail?.short_desc ?? detail?.intro;
-  return String(raw || '').trim();
-});
+/** 应用简介（brief_desc，短简介；不是详情里的长说明） */
+const briefText = computed(() => appDetail.value?.brief_desc || '');
 
 /** 副标题两行：开发者 · 包名 + 应用简介（有简介才轮播） */
 const subtitleLines = computed(() => {
-  const detail = appDetail.value || {};
-  const who = `${detail.developer_name || '—'} · ${detail.pkg_name || '—'}`;
+  const detail = appDetail.value;
+  const who = `${detail?.developer_name || '—'} · ${detail?.pkg_name || '—'}`;
   return briefText.value ? [who, briefText.value] : [who];
 });
 
@@ -132,85 +129,27 @@ const SUBTITLE_ROTATE_MS = 5000;
 const rotateIndex = ref(0);
 let subtitleTimer: number | null = null;
 
-const getMetricTimeMs = (m: any) => {
-  const raw = m?.created_at || m?.update_time || m?.last_update || 0;
-  const ms = new Date(raw).getTime();
-  return Number.isFinite(ms) ? ms : 0;
-};
-
-/** 时间戳/时间字符串 → "2026/9/20 18:46:06"（release_date 是毫秒时间戳，偶尔是秒） */
-const formatTimestamp = (raw: any) => {
-  if (raw === undefined || raw === null || raw === '') return '—';
-  const numeric = typeof raw === 'number' || /^\d+$/.test(String(raw).trim()) ? Number(raw) : NaN;
-  const parsed = Number.isFinite(numeric)
-    ? new Date(numeric < 1e12 ? numeric * 1000 : numeric)
-    : new Date(String(raw).replace(/-/g, '/'));
-  return Number.isFinite(parsed.getTime()) ? parsed.toLocaleString('zh-CN', { hour12: false }) : String(raw);
-};
-
-/**
- * 版本发布时间：优先 release_date。
- * metrics.created_at 只是「我们抓到这个版本数据」的时刻，通常比实际发布晚几天，不能当更新时间。
- */
-const getMetricReleaseMs = (m: any) => {
-  const release = m?.release_date ?? m?.releaseDate;
-  if (release !== undefined && release !== null && release !== '') {
-    const numeric = typeof release === 'number' || /^\d+$/.test(String(release).trim()) ? Number(release) : NaN;
-    if (Number.isFinite(numeric)) return numeric < 1e12 ? numeric * 1000 : numeric;
-    const parsed = new Date(String(release));
-    if (Number.isFinite(parsed.getTime())) return parsed.getTime();
-  }
-  return getMetricTimeMs(m);
-};
-
-const sortedMetrics = computed(() => {
-  const list = Array.isArray(metrics.value) ? metrics.value.slice() : [];
-  list.sort((a, b) => getMetricTimeMs(b) - getMetricTimeMs(a));
-  return list;
-});
-
-const latestMetric = computed(() => sortedMetrics.value[0] || null);
+/** 毫秒时间戳 → "2026/9/20 18:46:06" */
+const formatTimestamp = (ms: number) => (ms ? new Date(ms).toLocaleString('zh-CN', { hour12: false }) : '—');
 
 const ratingText = computed(() => {
-  const v = appDetail.value?.rating?.average_rating ?? appDetail.value?.average_rating ?? null;
-  if (v === null || v === undefined || v === '') return '—';
-  const n = Number(v);
-  return Number.isFinite(n) ? n.toFixed(1) : String(v);
+  const rating = appDetail.value?.average_rating;
+  return rating ? rating.toFixed(1) : '—';
 });
 
 const downloadsText = computed(() => {
-  const dc = latestMetric.value?.download_count ?? latestMetric.value?.downloads ?? null;
-  const n = Number(typeof dc === 'string' ? dc.replace(/[^\d.]/g, '') : dc);
-  if (!Number.isFinite(n) || n <= 0) return '—';
-  return n.toLocaleString();
+  const count = appDetail.value?.download_count;
+  return count ? count.toLocaleString() : '—';
 });
 
-const latestVersionText = computed(() => {
-  const m = latestMetric.value;
-  const v = m?.version_name ?? m?.version ?? m?.version_code ?? appDetail.value?.version_name ?? appDetail.value?.version ?? null;
-  if (v === null || v === undefined || v === '') return '—';
-  return String(v);
-});
+const latestVersionText = computed(() => appDetail.value?.version || '—');
 
-const latestUpdateTimeText = computed(() => {
-  /*
-   * 应用真实的版本发布时间是上游的 release_date（毫秒时间戳）；
-   * metrics.created_at / updated_at 只是「我们这边抓到数据」的时刻，不能当更新时间用。
-   */
-  const release = appDetail.value?.release_date ?? appDetail.value?.releaseDate;
-  if (release !== undefined && release !== null && release !== '') {
-    const text = formatTimestamp(release);
-    if (text !== '—') return text;
-  }
-
-  const raw = latestMetric.value?.created_at ?? latestMetric.value?.update_time ?? latestMetric.value?.last_update ?? appDetail.value?.update_time ?? appDetail.value?.created_at ?? null;
-  return formatTimestamp(raw);
-});
+/** 当前版本的发布时间（release_date） */
+const latestUpdateTimeText = computed(() => formatTimestamp(appDetail.value?.release_date || 0));
 
 const latestSizeText = computed(() => {
-  const raw = latestMetric.value?.size_bytes ?? latestMetric.value?.file_size ?? latestMetric.value?.size ?? appDetail.value?.size_bytes ?? null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return '—';
+  const n = appDetail.value?.size_bytes || 0;
+  if (n <= 0) return '—';
   const kb = 1024;
   const mb = kb * 1024;
   const gb = mb * 1024;
@@ -220,60 +159,17 @@ const latestSizeText = computed(() => {
   return `${n} B`;
 });
 
-const latestTargetSdkText = computed(() => {
-  const raw = latestMetric.value?.target_sdk ?? latestMetric.value?.min_sdk ?? latestMetric.value?.minsdk ?? appDetail.value?.target_sdk ?? appDetail.value?.minsdk ?? null;
-  if (raw === null || raw === undefined || raw === '') return '—';
-  return String(raw);
-});
+const latestTargetSdkText = computed(() => (appDetail.value?.target_sdk ? String(appDetail.value.target_sdk) : '—'));
 
-const historyItems = computed(() => {
-  const list = sortedMetrics.value;
-  if (list.length === 0) return [];
-
-  const bestByVersion = new Map<string, { key: string; time: number; value: any }>();
-  for (const m of list) {
-    const versionRaw = m?.version_name ?? m?.version ?? m?.version_code ?? '';
-    const version = String(versionRaw || '').trim();
-    // 用「版本发布时间」排序/取最新，而不是抓取时刻
-    const time = getMetricReleaseMs(m);
-    const key = version || `__t_${time}`;
-    const existing = bestByVersion.get(key);
-    if (!existing || existing.time < time) {
-      bestByVersion.set(key, { key, time, value: m });
-    }
-  }
-
-  const deduped = Array.from(bestByVersion.values())
-    .sort((a, b) => b.time - a.time)
-    .map((x, index) => {
-      const m = x.value;
-      const versionRaw = m?.version_name ?? m?.version ?? m?.version_code ?? `版本 ${index + 1}`;
-      const version = String(versionRaw || '—');
-      const dateRaw = m?.release_date ?? m?.releaseDate ?? m?.created_at ?? m?.update_time ?? m?.last_update ?? null;
-      const dateText = formatTimestamp(dateRaw);
-
-      const newFeatures = String(m?.new_features || '').trim();
-      let description = newFeatures;
-      if (!description) {
-        const parts: string[] = [];
-        const compileSdk = m?.compile_sdk_version;
-        const minSdk = m?.min_sdk ?? m?.minsdk ?? m?.target_sdk;
-        const downloadCount = m?.download_count;
-        const fileSize = m?.size_bytes ?? m?.file_size ?? m?.size;
-        if (compileSdk) parts.push(`编译SDK版本: ${compileSdk}`);
-        if (minSdk) parts.push(`最低支持SDK: ${minSdk}`);
-        if (downloadCount) parts.push(`累计下载: ${Number(downloadCount).toLocaleString()}次`);
-        if (fileSize) parts.push(`安装包大小: ${latestSizeText.value}`);
-        description = parts.length ? (index === 0 ? `最新版本 - ${parts.join(' | ')}` : `历史版本 - ${parts.join(' | ')}`) : (index === 0 ? '当前最新版本' : '历史版本');
-      }
-
-      return { key: x.key, version, dateText, description };
-    });
-
-  return deduped;
-});
-
-
+/* 华为偶尔把同一版本号发两次（重新上架），按 版本号 + 发布时间 区分 */
+const historyItems = computed(() =>
+  versions.value.map((entry) => ({
+    key: `${entry.version}@${entry.release_date}`,
+    version: entry.version,
+    dateText: formatTimestamp(entry.release_date),
+    description: entry.new_features
+  }))
+);
 
 /** 分享本页：带应用图标 + 名称 / 开发者 / 简介，系统分享面板不支持时退回复制 */
 const copyLink = () => shareCurrentPage('已复制应用分享信息');
@@ -296,33 +192,20 @@ const fetchDetail = async () => {
   if (!appId.value) return;
   loading.value = true;
   try {
-    const res: any = await hmApi.get<any>(`apps/app_id/${encodeURIComponent(appId.value)}`);
-    const data = res?.data || res;
-    const info = data?.info || data?.full_info || data || {};
-    const ratingRaw = data?.rating || info?.rating || {};
-    appDetail.value = { ...info, rating: ratingRaw };
+    const app = await getAppDetail(appId.value);
+    appDetail.value = app?.info ?? null;
+    versions.value = app?.versions ?? [];
+    if (!appDetail.value) return;
 
-    const title = appDetail.value?.name || '应用更新详情';
+    const title = appDetail.value.name || '应用更新详情';
     // 深链接直接进来时没有上一页，兜底回更新列表
     layoutStore.setPageInfo(title, true, () => goBackOrHome(router, '/updates'));
     document.title = `OpenStore | ${title}`;
     // 分享卡片带上这个应用自己的图标和文字
     setPageShareMeta(buildAppShareMeta(appDetail.value));
-
-    // 分享 / meta 描述统一由 page-share 决定：这里要的是「应用简介」（brief_desc），
-    // 不是详情里的长「应用说明」，所以不再单独改写 meta description。
-
-    const pkg = appDetail.value?.pkg_name;
-    if (pkg) {
-      const mRes: any = await hmApi.get<any>(`apps/metrics/${encodeURIComponent(pkg)}`);
-      const mData = mRes?.data || mRes;
-      metrics.value = Array.isArray(mData) ? mData : Array.isArray(mData?.data) ? mData.data : [];
-    } else {
-      metrics.value = [];
-    }
   } catch (e) {
     appDetail.value = null;
-    metrics.value = [];
+    versions.value = [];
     ElMessage.error('获取应用详情失败');
   } finally {
     loading.value = false;

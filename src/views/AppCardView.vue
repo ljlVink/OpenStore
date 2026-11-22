@@ -45,11 +45,14 @@ const fetchApps = async () => {
   try {
     if (isDetail.value) {
       const id = route.params.id as string;
-      const res = await getAppDetail(id);
-      items.value = res ? [res] : [];
+      const app = await getAppDetail(id);
+      items.value = app ? [app.info] : [];
     } else {
       items.value = await getPublicApps();
     }
+  } catch (error) {
+    console.error('Failed to fetch apps:', error);
+    items.value = [];
   } finally {
     loading.value = false;
   }

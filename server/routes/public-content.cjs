@@ -1,9 +1,10 @@
 /*
- * 前台公开内容：推荐应用、专题详情和公告
+ * 前台公开内容：推荐应用、应用详情、专题和公告
  */
 const express = require('express');
 const db = require('../database.cjs');
 const { getAppGalleryTopic, getAppGalleryTopics } = require('../lib/appgallery-topics.cjs');
+const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
 
 const router = express.Router();
 
@@ -12,6 +13,18 @@ router.get('/api/public/apps', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
+});
+
+// 应用详情 + 最近 25 个版本，实时读华为应用市场；id 为 appId 或包名
+router.get('/api/public/app-detail/:id', async (req, res) => {
+  try {
+    const app = await getAppGalleryApp(req.params.id);
+    if (!app) return res.status(404).json({ error: '应用不存在或已下架' });
+    res.json(app);
+  } catch (error) {
+    console.warn('[appgallery-apps] 应用查询失败：', req.params.id, error.message);
+    res.status(502).json({ error: '无法加载华为应用市场应用信息' });
+  }
 });
 
 // 华为应用市场「探索」页当前展示的专题

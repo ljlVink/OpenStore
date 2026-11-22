@@ -9,16 +9,15 @@
  */
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const { UPSTREAM_USER_AGENT } = require('./config.cjs');
 const { getAppGalleryTopic } = require('./appgallery-topics.cjs');
+const { getAppGalleryApp } = require('./appgallery-apps.cjs');
 /*
  * ---- 分享卡片（og / twitter meta）----
  * 微信、QQ、Twitter、Telegram 这类抓取器不执行 JS，卡片的图和文案必须在服务端就写好。
  * 规则：
  *   - 栏目页（探索 / 应用 / 专题 / 更新 / 关于…）：带网站 logo + 该栏目自己的标题、描述
  *   - 信息页（应用详情、更新详情、应用面板、专题详情）：带当前页面的资源图片（应用图标 / 专题首图）与文字
- * 栏目页只做字符串替换；信息页只有抓取器才会去查上游（30 分钟内存缓存 + 5s 超时），
+ * 栏目页只做字符串替换；信息页只有抓取器才会去查华为应用市场（30 分钟内存缓存），
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
 const SITE_ORIGIN = String(process.env.SITE_ORIGIN || 'https://next.betahub.tech').replace(/\/+$/, '');
@@ -106,15 +105,6 @@ const writeShareCardCache = (key, value) => {
   });
 };
 
-const fetchUpstreamJson = async (url) => {
-  const response = await axios.get(url, {
-    timeout: 5000,
-    headers: { 'User-Agent': UPSTREAM_USER_AGENT, Accept: 'application/json' },
-    validateStatus: () => true
-  });
-  return response.status >= 400 ? null : response.data;
-};
-
 /** 应用信息 → 卡片：标题是应用名称，副标题（描述）是「应用简介」（不是长「应用说明」），图是应用图标 */
 const buildAppShareCard = (info) => {
   if (!info || !info.name) return null;
@@ -137,12 +127,10 @@ const fetchAppShareCard = async (appId) => {
 
   let card = null;
   try {
-    const data = await fetchUpstreamJson(`${SHARE_UPSTREAM_BASE}/api/v0/apps/app_id/${encodeURIComponent(appId)}`);
-    const payload = data && data.data ? data.data : data;
-    const info = payload?.full_info || payload?.info || payload || {};
-    card = buildAppShareCard(info);
-    // 原始信息供结构化数据使用（评分、开发者、分类等），避免再次请求上游
-    if (card) card.upstreamInfo = info;
+    const app = await getAppGalleryApp(appId);
+    card = app ? buildAppShareCard(app.info) : null;
+    // 原始信息供结构化数据使用（评分、开发者、分类等），避免再次请求
+    if (card) card.upstreamInfo = app.info;
   } catch (error) {
     console.warn('[share-card] 应用信息查询失败：', appId, error.message);
   }

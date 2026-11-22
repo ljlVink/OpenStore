@@ -41,12 +41,12 @@
           <div class="meta-pill with-watermark">
             <span class="meta-pill-watermark">API</span>
             <span class="meta-pill-label">目标</span>
-            <span class="meta-pill-value">{{ lastMetric?.target_sdk || '—' }}</span>
+            <span class="meta-pill-value">{{ appDetail.target_sdk || '—' }}</span>
           </div>
           <div class="meta-pill with-watermark">
             <span class="meta-pill-watermark">API</span>
             <span class="meta-pill-label">最小</span>
-            <span class="meta-pill-value">{{ lastMetric?.minsdk || '—' }}</span>
+            <span class="meta-pill-value">{{ appDetail.minsdk || '—' }}</span>
           </div>
         </div>
 
@@ -54,21 +54,21 @@
           <div class="meta-card">
             <div class="meta-card-label">评分 / 评分数量</div>
             <div class="meta-card-value">
-              <span>{{ appDetail.rating?.average_rating ?? '—' }}</span>
-              <span class="meta-card-sub">({{ formatNumber(appDetail.rating?.total_star_rating_count) }})</span>
+              <span>{{ appDetail.average_rating ?? '—' }}</span>
+              <span class="meta-card-sub">({{ formatNumber(appDetail.total_star_rating_count) }})</span>
             </div>
           </div>
           <div class="meta-card">
             <div class="meta-card-label">总下载量</div>
-            <div class="meta-card-value">{{ formatNumber(lastMetric?.download_count) }}</div>
+            <div class="meta-card-value">{{ formatNumber(appDetail.download_count) }}</div>
           </div>
           <div class="meta-card">
             <div class="meta-card-label">大小</div>
-            <div class="meta-card-value">{{ formatSize(lastMetric?.size_bytes) }}</div>
+            <div class="meta-card-value">{{ formatSize(appDetail.size_bytes) }}</div>
           </div>
           <div class="meta-card">
             <div class="meta-card-label">版本号</div>
-            <div class="meta-card-value">{{ lastMetric?.version_code || '—' }}</div>
+            <div class="meta-card-value">{{ appDetail.version_code || '—' }}</div>
           </div>
         </div>
 
@@ -127,18 +127,6 @@
               <div class="meta-kv-key">更新时间</div>
               <div class="meta-kv-value" :title="formatDateTime(appDetail.release_date)">{{ formatDateTime(appDetail.release_date) }}</div>
             </div>
-            <div class="meta-kv">
-              <div class="meta-kv-key">数据更新时间</div>
-              <div class="meta-kv-value" :title="formatDateTime(lastMetric?.created_at)">{{ formatDateTime(lastMetric?.created_at) }}</div>
-            </div>
-            <div class="meta-kv">
-              <div class="meta-kv-key">创建时间</div>
-              <div class="meta-kv-value" :title="formatDateTime(appDetail.created_at)">{{ formatDateTime(appDetail.created_at) }}</div>
-            </div>
-            <div class="meta-kv">
-              <div class="meta-kv-key">上架时间</div>
-              <div class="meta-kv-value" :title="formatDateTime(appDetail.listed_at)">{{ formatDateTime(appDetail.listed_at) }}</div>
-            </div>
           </div>
 
           <div class="meta-group">
@@ -165,11 +153,11 @@
             </div>
             <div class="meta-kv">
               <div class="meta-kv-key">版本</div>
-              <div class="meta-kv-value" :title="lastMetric?.version">{{ lastMetric?.version || '—' }}</div>
+              <div class="meta-kv-value" :title="appDetail.version">{{ appDetail.version || '—' }}</div>
             </div>
             <div class="meta-kv">
               <div class="meta-kv-key">编译 API</div>
-              <div class="meta-kv-value" :title="String(lastMetric?.compile_sdk_version ?? '—')">{{ lastMetric?.compile_sdk_version || '—' }}</div>
+              <div class="meta-kv-value" :title="String(appDetail.compile_sdk_version || '—')">{{ appDetail.compile_sdk_version || '—' }}</div>
             </div>
           </div>
         </div>
@@ -249,7 +237,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { hmApi } from '../services/hm-api';
+import { getAppDetail, type AppGalleryAppInfo } from '../services/next-api';
 import HarmonyShareIcon from '../components/HarmonyShareIcon.vue';
 import { Picture, ArrowDown, ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -261,8 +249,7 @@ const route = useRoute();
 const router = useRouter();
 const layoutStore = useLayoutStore();
 const loading = ref(false);
-const appDetail = ref<any>(null);
-const lastMetric = ref<any>(null);
+const appDetail = ref<AppGalleryAppInfo | null>(null);
 const scriptTag = ref<HTMLScriptElement | null>(null);
 const descriptionRef = ref<HTMLElement | null>(null);
 const showFullDescription = ref(false);
@@ -459,19 +446,13 @@ const initObservers = () => {
 
 const deviceLabels = computed(() => {
   if (!appDetail.value) return [];
-  const info = appDetail.value;
-  const deviceRaw = info.main_device_codes ?? info.device_codes ?? info.terminals ?? info.device_code_list ?? [];
-  let deviceCodes = Array.isArray(deviceRaw) ? deviceRaw : (typeof deviceRaw === 'string' ? deviceRaw.split(',') : []);
-  deviceCodes = deviceCodes.map((c: any) => String(c).trim()).filter(Boolean);
+  const deviceCodes = appDetail.value.main_device_codes.map((c) => String(c).trim()).filter(Boolean);
   return deviceCodes.map((c: string) => DEVICE_CODE_MAP[c] ?? DEVICE_CODE_MAP[String(Number(c))] ?? `设备代码 ${c}`);
 });
 
 const countryLabels = computed(() => {
   if (!appDetail.value) return [];
-  const info = appDetail.value;
-  const countryRaw = info.release_countries ?? info.countries ?? info.supported_countries ?? [];
-  let countryCodes = Array.isArray(countryRaw) ? countryRaw : (typeof countryRaw === 'string' ? countryRaw.split(',') : []);
-  countryCodes = countryCodes.map((c: any) => String(c).trim().toUpperCase()).filter(Boolean);
+  const countryCodes = appDetail.value.release_countries.map((c) => String(c).trim().toUpperCase()).filter(Boolean);
   
   let regionDisplay: Intl.DisplayNames | undefined;
   try { regionDisplay = new Intl.DisplayNames(['zh-CN'], { type: 'region' }); } catch {}
@@ -501,7 +482,6 @@ const structuredData = computed(() => {
   if (!appDetail.value) return '';
 
   const app = appDetail.value;
-  const metric = lastMetric.value;
   const currentUrl = window.location.href;
 
   const data = {
@@ -510,20 +490,17 @@ const structuredData = computed(() => {
     "name": app.name,
     "operatingSystem": "Android", // Assuming Android for this platform
     "applicationCategory": `http://schema.org/SoftwareApplicationCategory/${app.kind_name || 'OtherApplication'}`,
-    "aggregateRating": app.rating?.average_rating ? {
+    "aggregateRating": app.average_rating ? {
       "@type": "AggregateRating",
-      "ratingValue": app.rating.average_rating,
-      "ratingCount": app.rating.total_star_rating_count || 0
+      "ratingValue": app.average_rating,
+      "ratingCount": app.total_star_rating_count || 0
     } : undefined,
     "offers": {
       "@type": "Offer",
-      "price": "0", // Assuming free apps
-      "priceCurrency": "CNY" // Assuming CNY
+      "price": app.price,
+      "priceCurrency": "CNY"
     },
-    "softwareVersion": metric?.version || undefined,
-    "downloadUrl": app.download_url || undefined,
-    "screenshot": app.screenshot_urls && app.screenshot_urls.length > 0 ? app.screenshot_urls : undefined,
-    "featureList": app.feature_list || undefined,
+    "softwareVersion": app.version || undefined,
     "description": app.description || undefined,
     "image": app.icon_url || undefined,
     "url": currentUrl,
@@ -600,18 +577,9 @@ const fetchData = async () => {
   
   loading.value = true;
   try {
-    const res = await hmApi.get<any>(`apps/app_id/${encodeURIComponent(appId)}`);
-    const data = res?.data || res; // Handle different response structures
-    
-    // Normalize data structure
-    const info = (data?.info) ? data.info : (data?.full_info) ? data.full_info : (data || {});
-    // Rating normalization
-    const ratingBase = data?.rating || {};
-    info.rating = {
-      average_rating: ratingBase.average_rating ?? info.average_rating ?? info.full_average_rating ?? null,
-      total_star_rating_count: ratingBase.total_star_rating_count ?? info.total_star_rating_count ?? info.info_rate_count ?? null,
-    };
-    
+    const app = await getAppDetail(appId);
+    if (!app) return;
+    const info = app.info;
     appDetail.value = info;
     screenshotList.value = collectScreenshots(info);
     viewerIndex.value = 0;
@@ -622,20 +590,6 @@ const fetchData = async () => {
     document.title = `OpenStore | ${title}`;
 
     // 分享 / meta 描述统一由 page-share 决定（用「应用简介」brief_desc，不是长「应用说明」）
-
-    if (info.pkg_name) {
-      try {
-        // 最新一条版本快照：顶部的 SDK、下载量、大小、版本号都取自这里
-        const metricsRes = await hmApi.get<any>(`apps/metrics/${encodeURIComponent(info.pkg_name)}`);
-        const metrics = metricsRes?.data || metricsRes; // Handle array or wrapped
-        const sortedMetrics = Array.isArray(metrics) ? metrics.slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : [];
-        if (sortedMetrics.length > 0) {
-          lastMetric.value = sortedMetrics[0];
-        }
-      } catch (e) {
-        console.error('Failed to fetch metrics', e);
-      }
-    }
   } catch (error) {
     console.error('Failed to fetch app details:', error);
   } finally {
@@ -658,7 +612,6 @@ watch(
   (next, prev) => {
     if (!next || next === prev) return;
     appDetail.value = null;
-    lastMetric.value = null;
     screenshotList.value = [];
     viewerIndex.value = 0;
     window.scrollTo({ top: 0 });

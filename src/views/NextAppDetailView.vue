@@ -25,7 +25,7 @@
           <!-- 关键指标：评分 / 下载量 / 大小 / 版本 -->
           <div class="hero-stats">
             <div class="stat">
-              <span class="stat-value">{{ appDetail.average_rating || appDetail.rating_score || '—' }}</span>
+              <span class="stat-value">{{ appDetail.average_rating || '—' }}</span>
               <span class="stat-label">评分</span>
             </div>
             <div class="stat">
@@ -33,11 +33,11 @@
               <span class="stat-label">下载量</span>
             </div>
             <div class="stat">
-              <span class="stat-value">{{ appDetail.size_str || formatSize(appDetail.size) }}</span>
+              <span class="stat-value">{{ formatSize(appDetail.size_bytes) }}</span>
               <span class="stat-label">大小</span>
             </div>
             <div class="stat">
-              <span class="stat-value">{{ appDetail.version || appDetail.app_version || '—' }}</span>
+              <span class="stat-value">{{ appDetail.version || '—' }}</span>
               <span class="stat-label">版本</span>
             </div>
           </div>
@@ -66,7 +66,7 @@
               :class="{ 'is-clamped': isIntroClamped }"
               :style="introClampStyle"
             >
-              <p class="panel-text">{{ appDetail.description || appDetail.intro || '暂无介绍' }}</p>
+              <p class="panel-text">{{ appDetail.description || '暂无介绍' }}</p>
 
               <template v-if="newFeatures">
                 <h2 class="panel-title is-spaced">新版本特性</h2>
@@ -146,10 +146,6 @@
                 <dt>开发者</dt>
                 <dd :title="appDetail.developer_name">{{ appDetail.developer_name || '—' }}</dd>
               </div>
-              <div v-if="appDetail.listed_at" class="info-row">
-                <dt>上架时间</dt>
-                <dd>{{ formatDate(appDetail.listed_at) }}</dd>
-              </div>
               <div class="info-row">
                 <dt>更新时间</dt>
                 <dd>{{ updatedAtText }}</dd>
@@ -217,8 +213,7 @@ import { ArrowDown, Clock, Picture } from '@element-plus/icons-vue';
 import HarmonyShareIcon from '../components/HarmonyShareIcon.vue';
 import DeviceIcon, { type DeviceKind } from '../components/DeviceIcon.vue';
 import { ElMessage } from 'element-plus';
-import { getAppDetail } from '../services/next-api';
-import { hmApi } from '../services/hm-api';
+import { getAppDetail, type AppGalleryAppInfo, type AppGalleryVersion } from '../services/next-api';
 import { useLayoutStore } from '../stores/layout';
 import { goBackOrHome } from '../utils/route-scroll';
 import { buildAppShareMeta, clearPageShareMeta, setPageShareMeta, shareCurrentPage } from '../utils/page-share';
@@ -227,28 +222,16 @@ const route = useRoute();
 const router = useRouter();
 const layoutStore = useLayoutStore();
 const loading = ref(false);
-const appDetail = ref<any>(null);
-/** 版本快照（apps/metrics/{pkg}）：更新记录取自这里 */
-const metrics = ref<any[]>([]);
+const appDetail = ref<AppGalleryAppInfo | null>(null);
+/** 最近 25 个版本（华为应用市场版本历史），更新记录取自这里 */
+const versions = ref<AppGalleryVersion[]>([]);
 /** 更新记录默认只露两条，之后每次「展开更多」再放一批 */
 const UPDATE_PREVIEW_COUNT = 2;
 const UPDATE_STEP = 5;
 const updatesShown = ref(UPDATE_PREVIEW_COUNT);
 
-/** 新版本说明：上游字段名不固定，兜一下 */
-const newFeatures = computed(() => appDetail.value?.new_features || appDetail.value?.upgrade_msg || '');
-
-/*
- * 更新记录：上游 apps/metrics/{pkg} 每个版本一条快照（可能重复），
- * 按版本去重后用 release_date 从新到旧排；created_at 是抓取时刻，不能当发布日期。
- */
-const metricReleaseMs = (metric: any) => {
-  const raw = metric?.release_date ?? metric?.releaseDate ?? metric?.created_at;
-  const numeric = typeof raw === 'number' || (typeof raw === 'string' && /^\d+$/.test(raw.trim())) ? Number(raw) : NaN;
-  if (Number.isFinite(numeric) && numeric > 0) return numeric < 1e12 ? numeric * 1000 : numeric;
-  const parsed = new Date(String(raw ?? ''));
-  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
-};
+/** 当前版本的更新说明 */
+const newFeatures = computed(() => appDetail.value?.new_features || '');
 
 /** 列表里日期只到天 */
 const formatUpdateDay = (ms: number) => {
@@ -257,27 +240,16 @@ const formatUpdateDay = (ms: number) => {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 };
 
-const updateRecords = computed(() => {
-  const bestByVersion = new Map<string, any>();
-  for (const metric of metrics.value) {
-    const version = String(metric?.version ?? metric?.version_name ?? '').trim();
-    if (!version) continue;
-    const previous = bestByVersion.get(version);
-    if (!previous || metricReleaseMs(previous) < metricReleaseMs(metric)) bestByVersion.set(version, metric);
-  }
-  return Array.from(bestByVersion.entries())
-    .map(([version, metric]) => {
-      const time = metricReleaseMs(metric);
-      return {
-        key: version,
-        version,
-        time,
-        dateText: formatUpdateDay(time),
-        description: String(metric?.new_features ?? metric?.upgrade_msg ?? '').trim()
-      };
-    })
-    .sort((a, b) => b.time - a.time);
-});
+/* 华为偶尔把同一版本号发两次（重新上架），按 版本号 + 发布时间 区分 */
+const updateRecords = computed(() =>
+  versions.value.map((entry) => ({
+    key: `${entry.version}@${entry.release_date}`,
+    version: entry.version,
+    time: entry.release_date,
+    dateText: formatUpdateDay(entry.release_date),
+    description: entry.new_features
+  }))
+);
 
 const visibleUpdates = computed(() => updateRecords.value.slice(0, updatesShown.value));
 const hasMoreUpdates = computed(() => updatesShown.value < updateRecords.value.length);
@@ -334,21 +306,6 @@ const showMoreUpdates = () => {
   void showUpdateCount(Math.min(updateRecords.value.length, updatesShown.value + UPDATE_STEP));
 };
 
-/** 更新记录是次要信息：详情渲染后再补请求，失败按无记录处理 */
-const loadUpdateRecords = async () => {
-  const pkg = appDetail.value?.pkg_name;
-  if (!pkg) return;
-  updatesShown.value = UPDATE_PREVIEW_COUNT;
-  try {
-    const res: any = await hmApi.get<any>(`apps/metrics/${encodeURIComponent(pkg)}`);
-    const data = res?.data ?? res;
-    metrics.value = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-  } catch (error) {
-    console.warn('[app-detail] 更新记录加载失败', error);
-    metrics.value = [];
-  }
-};
-
 /** 设备码 → 名称 + 图标（与应用页设备页签同一套图标；7 = 手表） */
 const DEVICE_CODE_META: Record<string, { key: string; label: string; kind: DeviceKind }> = {
   '0': { key: 'phone', label: '手机', kind: 'phone' },
@@ -360,18 +317,12 @@ const DEVICE_CODE_META: Record<string, { key: string; label: string; kind: Devic
 
 /** 支持的设备：main_device_codes -> 手机 / 平板 / 手表 … */
 const deviceItems = computed(() => {
-  const raw = appDetail.value?.main_device_codes ?? appDetail.value?.device_codes ?? appDetail.value?.device_code_list;
-  const list = Array.isArray(raw) ? raw : typeof raw === 'string' && raw ? raw.split(',') : [];
-  const items = list.map((code: any) => DEVICE_CODE_META[String(Number(code))]).filter(Boolean);
+  const items = (appDetail.value?.main_device_codes ?? []).map((code) => DEVICE_CODE_META[String(Number(code))]).filter(Boolean);
   return items.filter((item, index) => items.findIndex((x) => x.key === item!.key) === index);
 });
 
 /** 评分人数 */
-const ratingCount = computed(() => {
-  const raw = appDetail.value?.total_star_rating_count ?? appDetail.value?.info_rate_count;
-  const num = Number(raw);
-  return Number.isFinite(num) && num > 0 ? num : 0;
-});
+const ratingCount = computed(() => appDetail.value?.total_star_rating_count || 0);
 
 /*
  * 桌面端「应用介绍」限高：右栏（应用信息 + 技术信息）到底有多少，介绍就显示多少，
@@ -454,45 +405,25 @@ const toggleIntro = () => {
   nextTick(scheduleIntroMeasure);
 };
 
-/*
- * 应用更新时间：上游的 updated_at / rating_created_at 都是「我们这边同步数据的时刻」，
- * 真正代表版本发布/更新的是 release_date（毫秒时间戳），拿它换算才对得上应用市场里的更新时间。
- */
-const updatedAtText = computed(() => {
-  const detail = appDetail.value || {};
-  const release = detail.release_date ?? detail.releaseDate;
-  if (release) return formatDate(release);
-  return formatDate(detail.update_time || detail.updated_at);
-});
+/** 应用更新时间：当前版本的发布时间（release_date，毫秒时间戳） */
+const updatedAtText = computed(() => formatDate(appDetail.value?.release_date || 0));
 
 /** API 级别：拆成两枚胶囊「最小 21」「目标 24」 */
 const sdkPills = computed(() => {
-  const detail = appDetail.value || {};
-  const min = detail.minsdk ?? detail.min_sdk ?? detail.min_hmos_api_level;
-  const target = detail.target_sdk ?? detail.targetSdk;
+  const detail = appDetail.value;
   const parts: string[] = [];
-  if (min !== undefined && min !== null && min !== '') parts.push(`最小 ${min}`);
-  if (target !== undefined && target !== null && target !== '') parts.push(`目标 ${target}`);
+  if (detail?.minsdk) parts.push(`最小 ${detail.minsdk}`);
+  if (detail?.target_sdk) parts.push(`目标 ${detail.target_sdk}`);
   return parts;
 });
 
 /** 下载量原始值（用于 hover 提示） */
-const rawDownloadCount = computed(() => {
-  const raw = appDetail.value?.download_count ?? appDetail.value?.down_count;
-  return raw === undefined || raw === null ? '' : String(raw);
-});
+const rawDownloadCount = computed(() => String(appDetail.value?.download_count ?? ''));
 
 /** 下载量按 亿 / 万 压缩显示：73033350 -> 7,303万 */
 const downloadText = computed(() => {
-  const detail = appDetail.value;
-  if (!detail) return '—';
-  const str = detail.download_count_str || detail.down_count_desc;
-  // 上游有时把纯数字塞进 *_str 字段，那种情况统一走下面的压缩格式化
-  if (str && !/^\d+$/.test(String(str).trim())) return String(str);
-  const raw = detail.download_count ?? detail.down_count;
-  if (raw === undefined || raw === null || raw === '') return '—';
-  const num = Number(raw);
-  if (!Number.isFinite(num)) return String(raw);
+  const num = appDetail.value?.download_count;
+  if (!num) return '—';
   if (num > 100000000) return (num / 100000000).toFixed(1) + '亿';
   if (num > 10000) return (num / 10000).toFixed(1) + '万';
   return num.toLocaleString('zh-CN');
@@ -532,7 +463,7 @@ const copyLink = () => shareCurrentPage('已复制应用分享信息');
 const handleInstall = () => {
   if (!appDetail.value) return;
   
-  const appId = appDetail.value.app_id || appDetail.value.id;
+  const appId = appDetail.value.app_id;
   if (!appId) {
     ElMessage.warning('无法获取应用ID');
     return;
@@ -548,12 +479,10 @@ const fetchDetail = async () => {
   
   loading.value = true;
   try {
-    const res = await getAppDetail(id);
-    if (res && res.data) {
-      appDetail.value = res.data;
-    } else if (res) {
-      appDetail.value = res;
-    }
+    const app = await getAppDetail(id);
+    appDetail.value = app?.info ?? null;
+    versions.value = app?.versions ?? [];
+    updatesShown.value = UPDATE_PREVIEW_COUNT;
 
     if (appDetail.value) {
       const title = appDetail.value.name || '应用详情';
@@ -562,8 +491,6 @@ const fetchDetail = async () => {
       document.title = `OpenStore | ${title}`;
       // 分享卡片带上这个应用自己的图标和文字
       setPageShareMeta(buildAppShareMeta(appDetail.value));
-      // 不 await：不拖住首屏
-      void loadUpdateRecords();
     }
   } catch (error) {
     console.error('Failed to fetch app detail:', error);

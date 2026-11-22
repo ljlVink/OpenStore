@@ -1,26 +1,4 @@
-const { randomBytes } = require('node:crypto');
-const axios = require('axios');
-
-const gallery = axios.create({
-  baseURL: 'https://web-drcn.hispace.dbankcloud.com/edge',
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Phone;OpenHarmony 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 ArkWeb/6.0.0.42 Mobile',
-    Origin: 'https://appgallery.huawei.com',
-    Referer: 'https://appgallery.huawei.com/'
-  },
-  timeout: 5000,
-  maxRedirects: 0,
-  maxContentLength: 2 * 1024 * 1024
-});
-
-// Native AppGallery client endpoint; anonymous calls only need a plausible device profile.
-const store = axios.create({
-  baseURL: 'https://store-drcn.hispace.dbankcloud.com/hwmarket/harmony',
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 5000,
-  maxRedirects: 0,
-  maxContentLength: 4 * 1024 * 1024
-});
+const { openWebSession, callClient, expectOk, text, array, cardKind } = require('./appgallery-client.cjs');
 
 const HEADER_CARDS = new Set([
   'subjectappbigcard.landing', 'scenariolistcard.landing',
@@ -40,10 +18,6 @@ const LIST_TTL_MS = 10 * 60 * 1000;
 const TOPIC_DETAIL_ID = /^substancedetail\|([a-z0-9_-]{1,96})(?:\?|$)/i;
 let topicList = null;
 let topicListRequest = null;
-
-const text = (value) => typeof value === 'string' ? value.trim() : '';
-const array = (value) => Array.isArray(value) ? value : [];
-const cardKind = (card) => text(card?.type).split('appgallery.').pop();
 
 function addApp(apps, row) {
   const id = text(row?.appId);
@@ -81,18 +55,8 @@ function parseCards(cards, topic, apps) {
 
 async function loadTopic(id) {
   const signal = AbortSignal.timeout(12_000);
-  const identity = { 'Identity-Id': randomBytes(16).toString('hex') };
-  const { data: interfaceCode } = await gallery.get('/webedge/getInterfaceCode', { headers: identity, signal });
-  if (!text(interfaceCode)) throw new Error('AppGallery did not issue an interface code');
-
-  const post = async (path, body) => {
-    const { data } = await gallery.post(path, body, {
-      headers: { ...identity, 'Interface-Code': `${interfaceCode}_${Date.now()}` },
-      signal
-    });
-    if (String(data?.rtnCode) !== '0') throw new Error(`AppGallery ${path} rejected the request`);
-    return data;
-  };
+  const webPost = await openWebSession(signal);
+  const post = async (path, body) => expectOk(await webPost(path, body), path);
 
   const response = await post('/harmony/page-detail', {
     pageId: `webAgSubstanceDetail|${id}`, pageNum: 1, pageSize: 100,
@@ -124,29 +88,6 @@ async function loadTopic(id) {
   };
 }
 
-const clientBody = (device) => ({
-  harmonyDeviceType: device,
-  serviceType: 80,
-  phoneType: 'SCA-AL00',
-  clientPackage: 'com.huawei.hmsapp.appgallery',
-  clientVersion: '7.7.1',
-  clientVersionCode: '1470701300',
-  accountZone: 'CN',
-  locale: 'zh_Hans',
-  // The real client sends '*' when anonymous; omitting it yields a different, generic feed.
-  deviceId: '*',
-  harmonyInfo: {
-    harmonyApiLevel: 24,
-    harmonyReleaseType: 'Release',
-    hmosApiLevel: 60101,
-    hmosReleaseType: 'Release',
-    arkSupport: 1,
-    arkMinVersion: 2,
-    arkMaxVersion: 402653184,
-    harmonyDeviceType: device
-  }
-});
-
 function collectTopics(node, topics) {
   if (Array.isArray(node)) {
     for (const item of node) collectTopics(item, topics);
@@ -162,11 +103,7 @@ function collectTopics(node, topics) {
 }
 
 async function loadExploreTopics(device, signal) {
-  const call = async (method, params) => {
-    const { data } = await store.post('/client', { ...clientBody(device), ...params }, { params: { method }, signal });
-    if (String(data?.rtnCode) !== '0') throw new Error(`AppGallery ${method} rejected the request`);
-    return data;
-  };
+  const call = (method, params) => callClient(method, params, { device, signal });
 
   const home = await call('client.getPageDetail', { pageId: 'HomePage', pageNum: 1, pageSize: 40 });
   // The default tab is 探索; tablet tabs carry no tabName, so follow the store's own selection.
