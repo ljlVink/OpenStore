@@ -15,7 +15,6 @@
               {{ isSystemHealthy ? '全部服务运行正常' : '部分接口出现异常' }}
             </h1>
             <p class="overview-sub">
-              服务 {{ onlineServices }} / {{ totalServices }} ·
               页面接口 {{ okPages }} / {{ totalPages }} ·
               每 {{ AUTO_INTERVAL }} 秒自动检测
             </p>
@@ -34,13 +33,6 @@
       </div>
 
       <div class="overview-metrics">
-        <div class="ov-metric">
-          <span class="ov-label">在线服务</span>
-          <span class="ov-value">
-            <strong>{{ onlineServices }}</strong>
-            <em>/ {{ totalServices }}</em>
-          </span>
-        </div>
         <div class="ov-metric">
           <span class="ov-label">页面接口正常</span>
           <span class="ov-value">
@@ -63,61 +55,6 @@
           </span>
         </div>
       </div>
-    </section>
-
-    <!-- 后端服务 -->
-    <section class="service-grid">
-      <article
-        v-for="svc in services"
-        :key="svc.key"
-        class="service-card"
-        :class="{ 'is-offline': !svc.online }"
-      >
-        <header class="service-head">
-          <div class="service-identity">
-            <span class="service-icon">
-              <el-icon :size="20"><Connection /></el-icon>
-            </span>
-            <div class="service-names">
-              <h2 class="service-name">{{ svc.name }}</h2>
-              <code class="service-env">{{ svc.env }}</code>
-            </div>
-          </div>
-          <span class="status-pill" :class="svc.online ? 'is-online' : 'is-offline'">
-            <span class="pill-dot"></span>
-            {{ svc.online ? '在线' : '离线' }}
-          </span>
-        </header>
-
-        <div class="service-metrics">
-          <div class="metric">
-            <span class="metric-label">响应时间</span>
-            <div class="metric-figure" :class="latencyTone(svc.latency, svc.online)">
-              <span class="figure-num">{{ svc.latency ? svc.latency : '--' }}</span>
-              <span class="figure-unit">ms</span>
-              <span class="latency-tag">{{ latencyLabel(svc.latency, svc.online) }}</span>
-            </div>
-          </div>
-
-          <div class="metric">
-            <span class="metric-label">最后检测</span>
-            <div class="metric-time">
-              <span class="time-main">{{ svc.lastCheck ? svc.lastCheck.slice(11) : '--:--:--' }}</span>
-              <span class="time-date">{{ svc.lastCheck ? svc.lastCheck.slice(0, 10) : '尚未检测' }}</span>
-            </div>
-          </div>
-        </div>
-
-        <footer class="service-foot">
-          <span class="service-state" :class="latencyTone(svc.latency, svc.online)">
-            <span class="state-dot"></span>
-            {{ svc.statusText }}
-          </span>
-          <el-button :loading="svc.checking" @click="checkSingle(svc)">
-            立即检测
-          </el-button>
-        </footer>
-      </article>
     </section>
 
     <!-- 每个页面的关键接口 -->
@@ -170,7 +107,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useActiveScope } from '../utils/page-active';
 import {
-  Connection,
   Refresh,
   CircleCheckFilled,
   WarningFilled,
@@ -195,11 +131,6 @@ interface Probe {
   checking: boolean;
 }
 
-interface ServiceProbe extends Probe {
-  /** 对应的环境变量名，仅用于展示 */
-  env: string;
-}
-
 interface PageProbe extends Probe {
   /** 页面路由，点击可跳过去排查 */
   route: string;
@@ -214,20 +145,6 @@ const createProbe = <T extends Probe>(probe: Omit<T, 'online' | 'latency' | 'las
     statusText: '等待检测...',
     checking: false,
   }) as T;
-
-/*
- * 后端服务：探测真实的上游接口（/api/v0/* 会由本站代理转发到 VITE_API_TARGET）。
- * 之前用的是 /api/v0/charts/rating 这个本地桩，只要本站进程活着就一定「在线」，
- * 上游挂了也发现不了，所以换成真正会打到上游的 market_info。
- */
-const services = ref<ServiceProbe[]>([
-  createProbe<ServiceProbe>({
-    key: 'api',
-    name: 'API 服务',
-    env: 'VITE_API_TARGET',
-    probePath: '/api/v0/market_info',
-  }),
-]);
 
 /*
  * 动态页面检测必需的接口；没有数据依赖的页面直接检测页面地址。
@@ -267,20 +184,14 @@ const pages = ref<PageProbe[]>([
   }),
 ]);
 
-const allProbes = computed<Probe[]>(() => [...services.value, ...pages.value]);
-
-const totalServices = computed(() => services.value.length);
-const onlineServices = computed(() => services.value.filter((s) => s.online).length);
 const totalPages = computed(() => pages.value.length);
 const okPages = computed(() => pages.value.filter((p) => p.online).length);
 
-const isSystemHealthy = computed(
-  () => onlineServices.value === totalServices.value && okPages.value === totalPages.value
-);
-const isCheckingAny = computed(() => allProbes.value.some((p) => p.checking));
+const isSystemHealthy = computed(() => okPages.value === totalPages.value);
+const isCheckingAny = computed(() => pages.value.some((p) => p.checking));
 
 const avgLatency = computed(() => {
-  const online = allProbes.value.filter((p) => p.online && p.latency > 0);
+  const online = pages.value.filter((p) => p.online && p.latency > 0);
   if (!online.length) return null;
   return Math.round(online.reduce((sum, p) => sum + p.latency, 0) / online.length);
 });
@@ -293,15 +204,6 @@ const latencyTone = (latency: number, online = true) => {
   if (latency < 400) return 'is-good';
   if (latency < 900) return 'is-warn';
   return 'is-bad';
-};
-
-const latencyLabel = (latency: number, online = true) => {
-  if (!online) return '连接失败';
-  if (!latency) return '等待检测';
-  if (latency < 150) return '极速';
-  if (latency < 400) return '良好';
-  if (latency < 900) return '一般';
-  return '偏慢';
 };
 
 const goPage = (route: string) => {
@@ -354,7 +256,7 @@ const resetCountdown = () => {
 
 const runAllChecks = async () => {
   resetCountdown();
-  await Promise.all(allProbes.value.map((probe) => checkProbe(probe)));
+  await Promise.all(pages.value.map((probe) => checkProbe(probe)));
 };
 
 const checkSingle = async (probe: Probe) => {
@@ -548,183 +450,6 @@ useActiveScope(startAutoCheck, stopAutoCheck);
   color: var(--el-text-color-secondary);
 }
 
-/* ---------- 服务卡片 ---------- */
-.service-grid {
-  display: grid;
-  /* 服务数量会变：1 个时整行铺满，多个时在够宽的情况下自动分列 */
-  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
-  gap: 16px;
-  margin-top: 16px;
-}
-
-.service-card {
-  --accent: var(--el-color-success);
-  display: flex;
-  flex-direction: column;
-  padding: 18px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 16px;
-  background-color: var(--el-bg-color);
-  box-shadow: var(--el-box-shadow-light);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.service-card:hover {
-  border-color: var(--el-border-color);
-  box-shadow: var(--el-box-shadow);
-}
-
-.service-card.is-offline {
-  --accent: var(--el-color-danger);
-}
-
-.service-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.service-identity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.service-icon {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  color: var(--el-color-primary);
-  background-color: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
-}
-
-.service-names {
-  min-width: 0;
-}
-
-.service-name {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.service-env {
-  display: inline-block;
-  margin-top: 3px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--el-text-color-secondary);
-  background-color: var(--el-fill-color-light);
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.status-pill.is-online {
-  color: var(--el-color-success);
-  background-color: color-mix(in srgb, var(--el-color-success) 12%, transparent);
-}
-
-.status-pill.is-offline {
-  color: var(--el-color-danger);
-  background-color: color-mix(in srgb, var(--el-color-danger) 12%, transparent);
-}
-
-.pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent);
-}
-
-.service-metrics {
-  display: grid;
-  /* 和总览、页面列表同一套写法：列数由可用宽度决定，不做「到某个断点才变」的硬切换 */
-  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-  padding: 12px 14px;
-  border: 1px solid var(--el-border-color-extra-light);
-  border-radius: 12px;
-  background-color: var(--el-fill-color-lighter);
-}
-
-.metric-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.metric-figure {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-  line-height: 1;
-}
-
-.figure-num {
-  font-size: 24px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.figure-unit {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.latency-tag {
-  margin-left: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  /* 颜色跟随 .metric-figure 上的档位色（currentColor），和数字保持同一色系 */
-  background-color: color-mix(in srgb, currentColor 14%, transparent);
-}
-
-.metric-time {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.time-main {
-  font-size: 20px;
-  font-weight: 650;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-primary);
-}
-
-.time-date {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 .is-good {
   color: var(--el-color-success);
 }
@@ -739,30 +464,6 @@ useActiveScope(startAutoCheck, stopAutoCheck);
 
 .is-idle {
   color: var(--el-text-color-secondary);
-}
-
-.service-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.service-state {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12.5px;
-}
-
-.state-dot {
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background-color: currentColor;
 }
 
 /* ---------- 页面接口 ---------- */
@@ -964,7 +665,6 @@ useActiveScope(startAutoCheck, stopAutoCheck);
     font-size: 19px;
   }
 
-  .service-card,
   .page-checks {
     padding: 15px;
     border-radius: 14px;
@@ -972,21 +672,12 @@ useActiveScope(startAutoCheck, stopAutoCheck);
 }
 
 @media (max-width: 560px) {
-  /* 两张卡片的操作按钮在这里一起变成整行，避免一张整行、一张还挂在右边 */
+  /* 窄屏时操作按钮变成整行 */
   .overview-head {
     align-items: stretch;
   }
 
   .overview-refresh {
-    width: 100%;
-  }
-
-  .service-foot {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .service-foot .el-button {
     width: 100%;
   }
 }
