@@ -162,7 +162,7 @@ const pages = ref<PageProbe[]>([
     key: 'apps',
     name: '应用',
     route: '/apps',
-    probePath: '/api/public/apps/overview',
+    probePath: '/api/public/apps/discover',
   }),
   createProbe<PageProbe>({
     key: 'topics',

@@ -24,7 +24,9 @@
         <span class="version" v-if="app.version || app.versionName || app.version_name">
           {{ app.version || app.versionName || app.version_name }}
         </span>
-        <span class="downloads" v-if="app.down_count || app.download_count || app.download_count_str || app.down_count_desc">
+        <!-- 华为列表给的是现成文案（「9,253 万次安装」），原样显示 -->
+        <span class="downloads" v-if="app.download_count_desc">{{ app.download_count_desc }}</span>
+        <span class="downloads" v-else-if="app.down_count || app.download_count || app.download_count_str || app.down_count_desc">
           {{ downloadText }}次下载
         </span>
       </div>

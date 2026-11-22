@@ -1,5 +1,5 @@
 /*
- * 后台运营接口：数据新鲜度 / 全接口体检 / 调用拓扑 / 访客洞察 / 请求重放 / 应用总览 / 屏蔽应用
+ * 后台运营接口：数据新鲜度 / 全接口体检 / 调用拓扑 / 访客洞察 / 请求重放 / 屏蔽应用
  */
 const express = require('express');
 const axios = require('axios');
@@ -10,7 +10,6 @@ const { pushLiveLog, liveLogBuffer } = require('../lib/live-log.cjs');
 const { FRESHNESS_SOURCES, PAGE_LABELS, normalizeVisitorPath } = require('../lib/visitor-paths.cjs');
 const { PERF_CHECK_TIMEOUT_MS, PERF_CHECK_BUDGET_MS } = require('../lib/perf-check.cjs');
 const { extractCountryCode, matchCnProvince, CITY_TO_PROVINCE } = require('../lib/cities.cjs');
-const { getAppsOverview, APP_OVERVIEW_CACHE_TTL, appOverviewCache } = require('../lib/apps-overview.cjs');
 const { cachedVisitorsAll, VISITORS_INSIGHTS_TTL, VISITORS_INSIGHTS_STALE_TTL } = require('../lib/visitors-stats.cjs');
 const { invalidateBlockedAppsCache } = require('../lib/blocked-apps.cjs');
 const { previewWarningPage, getPageConfig, savePageConfig, resetPageConfig, DEFAULT_PAGE_CONFIG, getAllowList, saveAllowList, listBlockRecords, clearBlockRecords, unblockIp, scriptGuardSnapshot, triggerBlock, hardBanIp, hardUnbanIp, listHardBans } = require('../lib/script-guard.cjs');
@@ -85,26 +84,7 @@ module.exports = ({ collectPerfCheckRoutes }) => {
       )
     );
 
-    // 上游缓存快照（内存）与进程运行时长
-    const cacheEntries = [...appOverviewCache.values()];
-    const newestCache = cacheEntries.length ? Math.max(...cacheEntries.map((e) => e.timestamp)) : null;
-    const oldestCache = cacheEntries.length ? Math.min(...cacheEntries.map((e) => e.timestamp)) : null;
     const now = Date.now();
-
-    const items = [
-      ...rows,
-      {
-        key: 'apps_overview',
-        label: '上游缓存快照',
-        ttl: APP_OVERVIEW_CACHE_TTL / 1000,
-        last: newestCache ? new Date(newestCache).toISOString() : null,
-        ageSeconds: newestCache ? Math.round((now - newestCache) / 1000) : null,
-        extra: {
-          entries: cacheEntries.length,
-          oldestAgeSeconds: oldestCache ? Math.round((now - oldestCache) / 1000) : null
-        }
-      }
-    ];
 
     // 页面访问：按前台页面聚合最近一次访问（90 天内）与近 30 天访问量
     const pageRows = await new Promise((resolve) => {
@@ -150,7 +130,7 @@ module.exports = ({ collectPerfCheckRoutes }) => {
       .sort((a, b) => b.visits - a.visits)
       .slice(0, 8);
 
-    res.json({ success: true, now: new Date(now).toISOString(), items, pages });
+    res.json({ success: true, now: new Date(now).toISOString(), items: rows, pages });
   });
 
   // ---- 调用拓扑：从实时日志缓冲聚合出「前端 → 后端 API → 上游」的链路 ----
@@ -508,29 +488,6 @@ module.exports = ({ collectPerfCheckRoutes }) => {
       res.status(500).json({ success: false, error: error.message, ms });
     }
   });
-
-  router.get('/api/public/apps/overview', async (req, res) => {
-    const deviceParam = req.query.device;
-    const deviceCode =
-      deviceParam === undefined || deviceParam === null || deviceParam === ''
-        ? undefined
-        : Number(deviceParam);
-    const cacheKey = deviceCode === undefined || Number.isNaN(deviceCode) ? 'all' : `device:${deviceCode}`;
-
-    try {
-      const { data, cached, stale } = await getAppsOverview(cacheKey, deviceCode);
-      // 客户端/CDN 也缓存一会儿，减少同一批访客的重复请求
-      res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
-      res.json({ success: true, data, cached, stale });
-    } catch (error) {
-      console.error('Failed to build apps overview:', error.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to build apps overview'
-      });
-    }
-  });
-
 
 
   router.get('/api/admin/blocked-apps', requireAuth, (req, res) => {

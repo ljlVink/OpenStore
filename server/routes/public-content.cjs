@@ -1,10 +1,12 @@
 /*
- * 前台公开内容：推荐应用、应用详情、专题和公告
+ * 前台公开内容：推荐应用、应用列表与搜索、应用详情、专题和公告
  */
 const express = require('express');
 const db = require('../database.cjs');
 const { getAppGalleryTopic, getAppGalleryTopics } = require('../lib/appgallery-topics.cjs');
 const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
+const { getAppGalleryDiscoverApps, searchAppGallery } = require('../lib/appgallery-lists.cjs');
+const { loadBlockedAppPackages } = require('../lib/blocked-apps.cjs');
 
 const router = express.Router();
 
@@ -13,6 +15,31 @@ router.get('/api/public/apps', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
+});
+
+// 应用列表：华为应用市场搜索页的「发现更多」；后台屏蔽的应用不出现在列表里
+router.get('/api/public/apps/discover', async (req, res) => {
+  try {
+    const apps = await getAppGalleryDiscoverApps();
+    loadBlockedAppPackages((blocked) => {
+      res.json({ items: apps.filter((app) => !blocked.has(app.pkg_name.toLowerCase())) });
+    });
+  } catch (error) {
+    console.warn('[appgallery-lists] 发现更多查询失败：', error.message);
+    res.status(502).json({ error: '无法加载华为应用市场应用列表' });
+  }
+});
+
+// 搜索：实时查华为应用市场，被屏蔽的应用仍能搜到
+router.get('/api/public/apps/search', async (req, res) => {
+  try {
+    const items = await searchAppGallery(req.query.q);
+    if (!items) return res.status(400).json({ error: '搜索关键词为空或过长' });
+    res.json({ items });
+  } catch (error) {
+    console.warn('[appgallery-lists] 搜索失败：', req.query.q, error.message);
+    res.status(502).json({ error: '无法搜索华为应用市场' });
+  }
 });
 
 // 应用详情 + 最近 25 个版本，实时读华为应用市场；id 为 appId 或包名
