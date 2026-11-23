@@ -1,13 +1,26 @@
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    title="脚本护栏"
-    :width="dialogWidth"
-    :fullscreen="isMobile"
-    append-to-body
-    @update:model-value="(v: boolean) => emit('update:modelValue', v)"
-    @open="handleOpen"
-  >
+  <el-card class="guard-panel" shadow="never">
+    <div class="guard-actions">
+      <template v-if="tab === 'allow'">
+        <el-button size="small" :loading="loadingAllow" @click="loadAllow">刷新</el-button>
+        <el-button size="small" type="primary" :loading="savingAllow" :disabled="!allowLoaded" @click="saveAllow">
+          保存
+        </el-button>
+      </template>
+      <template v-else-if="tab === 'edit'">
+        <el-button size="small" :loading="resetting" :disabled="!configLoaded" @click="restoreDefaults">恢复默认</el-button>
+        <el-button size="small" type="primary" :loading="saving" :disabled="!configLoaded" @click="save">保存并预览</el-button>
+      </template>
+      <el-button v-else-if="tab === 'bans'" size="small" :loading="loadingBans" @click="loadBans">刷新</el-button>
+      <template v-else>
+        <el-button size="small" type="danger" :loading="triggering" @click="triggerReal">触发拦截</el-button>
+        <template v-if="tab === 'records'">
+          <el-button size="small" type="danger" plain :loading="clearing" @click="clearRecords">清空记录</el-button>
+          <el-button size="small" :loading="loadingRecords" @click="loadRecords">刷新</el-button>
+        </template>
+      </template>
+    </div>
+
     <el-tabs v-model="tab" class="guard-tabs">
       <!-- ------------------------------ 拦截记录 ------------------------------ -->
       <el-tab-pane label="拦截记录" name="records">
@@ -266,34 +279,7 @@
       </el-tab-pane>
 
     </el-tabs>
-
-    <template #footer>
-      <template v-if="tab === 'allow'">
-        <el-button :loading="loadingAllow" @click="loadAllow">刷新</el-button>
-        <el-button type="primary" :loading="savingAllow" :disabled="!allowLoaded" @click="saveAllow">
-          保存
-        </el-button>
-      </template>
-      <template v-else-if="tab === 'edit'">
-        <el-button :loading="resetting" :disabled="!configLoaded" @click="restoreDefaults">恢复默认</el-button>
-        <el-button type="primary" :loading="saving" :disabled="!configLoaded" @click="save">保存并预览</el-button>
-      </template>
-      <template v-else-if="tab === 'bans'">
-        <el-button :loading="loadingBans" @click="loadBans">刷新</el-button>
-        <el-button @click="emit('update:modelValue', false)">关闭</el-button>
-      </template>
-      <template v-else-if="tab === 'records'">
-        <el-button type="danger" :loading="triggering" @click="triggerReal">触发拦截</el-button>
-        <el-button type="danger" plain :loading="clearing" @click="clearRecords">清空记录</el-button>
-        <el-button :loading="loadingRecords" @click="loadRecords">刷新</el-button>
-        <el-button @click="emit('update:modelValue', false)">关闭</el-button>
-      </template>
-      <template v-else>
-        <el-button type="danger" :loading="triggering" @click="triggerReal">触发拦截</el-button>
-        <el-button @click="emit('update:modelValue', false)">关闭</el-button>
-      </template>
-    </template>
-  </el-dialog>
+  </el-card>
 </template>
 
 <script setup lang="ts">
@@ -301,8 +287,8 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowRight } from '@element-plus/icons-vue';
-import ScriptGuardRecordDetail from './ScriptGuardRecordDetail.vue';
-import { decodePercentEncoded } from '../utils/text';
+import ScriptGuardRecordDetail from '../../components/ScriptGuardRecordDetail.vue';
+import { decodePercentEncoded } from '../../utils/text';
 import {
   getScriptGuardPreview,
   getScriptGuardPageConfig,
@@ -321,10 +307,7 @@ import {
   type ScriptGuardBlockRecord,
   type ScriptGuardTriggerResult,
   type ScriptGuardHardBan
-} from '../services/admin';
-
-defineProps<{ modelValue: boolean }>();
-const emit = defineEmits(['update:modelValue']);
+} from '../../services/admin';
 
 // 默认停在「拦截记录」（最常看的一页）
 const tab = ref<'preview' | 'edit' | 'records' | 'bans' | 'allow'>('records');
@@ -357,7 +340,7 @@ const form = reactive<ScriptGuardPageConfig>({
 // 提示条目在表里是数组，在输入框里是「一行一条」
 const tipsText = ref('');
 
-// 断点与后台其它页面一致：768 手机 / 1120 窄屏；高度也要跟视口挂钩，否则弹窗会顶出屏幕
+// 手机端用卡片，其余屏幕的表格高度随视口调整。
 const viewport = reactive({ w: window.innerWidth, h: window.innerHeight });
 const syncViewport = () => {
   viewport.w = window.innerWidth;
@@ -365,16 +348,7 @@ const syncViewport = () => {
 };
 
 const isMobile = computed(() => viewport.w < 768);
-const isNarrow = computed(() => viewport.w < 1120);
-
-// 手机全屏、窄屏几乎占满，宽屏固定 880px
-// 桌面给足宽度：记录表最小列宽合计约 970px，比它窄就会把各列压成省略号
-const dialogWidth = computed(() =>
-  isMobile.value ? '92vw' : isNarrow.value ? '94vw' : 'min(1120px, 92vw)'
-);
-
-// 记录表高度跟着视口走：太高会顶出弹窗，太矮又看不全几行
-const tableHeight = computed(() => Math.max(240, Math.min(420, viewport.h - 380)));
+const tableHeight = computed(() => Math.max(240, Math.min(640, viewport.h - 300)));
 
 const applyConfig = (config: ScriptGuardPageConfig) => {
   form.badge = config.badge;
@@ -458,21 +432,6 @@ const loadConfig = async () => {
   } finally {
     loadingConfig.value = false;
   }
-};
-
-const handleOpen = () => {
-  // 默认页签是拦截记录：已在该页就手动刷新，否则切过来让 watch 去加载（两条路径各只发一次）
-  if (tab.value === 'records') void loadRecords();
-  else tab.value = 'records';
-
-  // 每次打开都从「示例预览」开始，避免上次的真实触发结果被当成示例数据
-  realResult.value = null;
-
-  // 另外几页的数据一并预取，切过去就不用等
-  void loadPreview();
-  void loadConfig();
-  void loadBans();
-  void loadAllow();
 };
 
 /* ---------------------------- 拦截记录 ---------------------------- */
@@ -665,7 +624,7 @@ watch(tab, (next) => {
 
 const save = async () => {
   if (!configLoaded.value) {
-    ElMessage.warning('配置还没加载成功，先点「重新打开」再试，避免覆盖已有自定义');
+    ElMessage.warning('配置还没加载成功，先重新进入面板再试，避免覆盖已有自定义');
     return;
   }
   const tips = tipsText.value
@@ -746,11 +705,27 @@ const saveAllow = async () => {
   }
 };
 
-onMounted(() => window.addEventListener('resize', syncViewport));
+onMounted(() => {
+  window.addEventListener('resize', syncViewport);
+  void loadRecords();
+  void loadPreview();
+  void loadConfig();
+  void loadBans();
+  void loadAllow();
+});
 onBeforeUnmount(() => window.removeEventListener('resize', syncViewport));
 </script>
 
 <style scoped>
+.guard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.guard-actions .el-button {
+  margin-left: 0;
+}
 .guard-tabs :deep(.el-tabs__header) {
   margin-bottom: 14px;
 }
@@ -801,7 +776,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncViewport));
   overflow: hidden;
   background: #0d1117;
 }
-/* iframe 高度跟视口走，避免顶出弹窗 */
+/* 预览高度随视口调整，避免在小屏上占据太多空间。 */
 .guard-frame {
   display: block;
   width: 100%;
@@ -815,12 +790,6 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncViewport));
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
-.guard-form {
-  max-height: min(56vh, 560px);
-  overflow-y: auto;
-  padding-right: 6px;
-}
-
 /* ---- 放行名单 ---- */
 .allow-tags {
   width: 100%;
@@ -1065,15 +1034,18 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncViewport));
   color: var(--el-text-color-placeholder);
 }
 
-/* 窄屏：说明文字和间距收紧一点，按钮不换行 */
+/* 窄屏收紧页签间距和说明文字。 */
 @media (max-width: 768px) {
+  .guard-panel {
+    --el-card-padding: 14px;
+  }
   .guard-hint {
     margin-bottom: 12px;
     font-size: 12px;
   }
-  .guard-form {
-    max-height: none;
-    padding-right: 0;
+  .guard-tabs :deep(.el-tabs__item) {
+    padding-inline: 5px;
+    font-size: 13px;
   }
   .guard-summary {
     gap: 4px 12px;

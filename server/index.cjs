@@ -337,7 +337,7 @@ db.get(`SELECT id FROM users WHERE username=?`, ['admin'], (err, row) => {
       const generated = crypto.randomBytes(12).toString('base64url');
       console.warn('[security] 未配置 ADMIN_PASSWORD，已为 admin 生成随机初始密码（仅本次启动打印）：');
       console.warn(`[security] admin 初始密码: ${generated}`);
-      console.warn('[security] 请登录后立即修改，或直接在 .env 里设置 ADMIN_PASSWORD。');
+      console.warn('[security] 请在 .env 里设置 ADMIN_PASSWORD 后重启服务，以替换初始密码。');
       db.run(`INSERT INTO users (username, password_hash, role) VALUES (?,?,?)`, ['admin', bcrypt.hashSync(generated, 10), 'admin']);
     } else {
       db.run(`INSERT INTO users (username, password_hash, role) VALUES (?,?,?)`, ['admin', bcrypt.hashSync(configuredPwd, 10), 'admin']);
@@ -348,7 +348,7 @@ db.get(`SELECT id FROM users WHERE username=?`, ['admin'], (err, row) => {
 });
 
 // 登录相关接口（原文件里就排在定时任务 / 建管理员账号之后）
-mountRouter('auth', require('./routes/auth.cjs'));            // 登录 / 刷新 token / 改密码 / 后台概览
+mountRouter('auth', require('./routes/auth.cjs'));            // 登录 / 刷新 token / 改密码
 
 /*
  * /api/admin 的兜底鉴权闸门：处理未被前面业务路由接住的 /api/admin 请求。

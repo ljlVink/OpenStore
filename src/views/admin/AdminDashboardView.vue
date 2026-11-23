@@ -51,11 +51,10 @@
             class="topnav-group"
             :class="{
               'is-active': group.title === activeGroupTitle,
-              'is-open': group.title === openGroupTitle,
-              'is-single': group.items.length === 1
+              'is-open': group.title === openGroupTitle
             }"
-            :aria-expanded="group.items.length > 1 ? group.title === openGroupTitle : undefined"
-            @click="handleGroupClick(group)"
+            :aria-expanded="group.title === openGroupTitle"
+            @click="toggleMobileGroup(group.title)"
           >
             <span>{{ group.title }}</span>
           </button>
@@ -81,17 +80,14 @@
         <!--
           面板标题行：与侧边栏顶部对齐，同时留出右上角位置放该面板的主操作按钮
           （视图里 .toolbar / .text-right 的按钮会被拉到这一行的右侧）
-          数据总览本身就是首页，不重复写标题。
         -->
-        <div v-if="active !== 'overview'" class="pane-head">
+        <div class="pane-head">
           <h2 class="pane-title">{{ currentSection.title }}</h2>
           <span class="pane-hint">{{ currentSection.hint }}</span>
         </div>
         <!--
-          面板全部挂载、只切显示：进入后台后「数据总览」先挂载先请求，
-          其余面板随后分批在后台挂好（数据也就一起加载完了），
-          所以点任何面板都是立刻出内容，不会再有「进去才加载」。
-          非当前面板挪到屏幕外但保留真实宽度，图表照常按真实尺寸初始化。
+          当前面板先挂载，其余面板随后预加载并隐藏，切换时不用重新请求。
+          脚本拦截按进入面板时加载，离开时卸载。
         -->
         <div class="admin-pane-stage">
           <div
@@ -101,7 +97,11 @@
             :class="{ 'is-parked': key !== active }"
             :aria-hidden="key !== active ? 'true' : undefined"
           >
-            <component :is="PANE_COMPONENTS[key]" v-bind="paneProps(key)" />
+            <component
+              v-if="key !== 'script-guard' || key === active"
+              :is="PANE_COMPONENTS[key]"
+              :embedded="key === 'script-guard' ? undefined : true"
+            />
           </div>
         </div>
       </section>
@@ -116,7 +116,7 @@
   import { useLayoutStore } from '../../stores/layout';
   import { goBackOrHome } from '../../utils/route-scroll';
 import {
-  DataLine,
+  Lock,
   List,
   Coin,
   Warning,
@@ -127,99 +127,60 @@ import {
 
   import BrandMark from '../../components/BrandMark.vue';
 
-  /*
-   * 面板一律按需加载：全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
-   * （实测一次加载 240+ 个模块请求、12MB 左右）。改成异步组件后，只加载当前面板需要的那部分。
-   */
-  const DashboardOverviewView = defineAsyncComponent(() => import('./DashboardOverviewView.vue'));
+  // 异步加载各面板，不阻塞后台首屏。
+  const ScriptGuardView = defineAsyncComponent(() => import('./ScriptGuardView.vue'));
   const DatabaseAdminView = defineAsyncComponent(() => import('./DatabaseAdminView.vue'));
   const SystemLogsView = defineAsyncComponent(() => import('./SystemLogsView.vue'));
   const IncidentsAdminView = defineAsyncComponent(() => import('./IncidentsAdminView.vue'));
   const SeoSubmitView = defineAsyncComponent(() => import('./SeoSubmitView.vue'));
 
-type PaneKey =
-  | 'overview'
-  | 'logs'
-  | 'incidents'
-  | 'database'
-  | 'seo';
-
-const PANE_KEYS: PaneKey[] = [
-  'overview',
-  'logs', 'incidents',
-  'database', 'seo'
-];
+const PANE_KEYS = ['database', 'logs', 'incidents', 'seo', 'script-guard'] as const;
+type PaneKey = (typeof PANE_KEYS)[number];
+const DEFAULT_PANE: PaneKey = 'database';
 
 const route = useRoute();
 
 /*
  * 当前面板写进地址栏（?pane=xxx）：刷新、前进后退、复制链接都能回到同一个面板。
- * 直接访问没有 pane 参数时，回到默认的「数据总览」。
+ * 没有 pane 参数或指定的面板不存在时，打开「数据管理」。
  */
 const paneFromQuery = (): PaneKey => {
-  const raw = String(route.query.pane || '');
-  return (PANE_KEYS as string[]).includes(raw) ? (raw as PaneKey) : 'overview';
+  return PANE_KEYS.find((key) => key === route.query.pane) ?? DEFAULT_PANE;
 };
 
 const active = ref<PaneKey>(paneFromQuery());
 
-// 面板 → 组件：全部挂载着，非当前面板加 is-parked 隐藏，切回来不重新请求
+// 非当前面板加 is-parked 隐藏，脚本拦截除外，由模板按需挂载。
 const PANE_COMPONENTS: Record<PaneKey, Component> = {
-  overview: DashboardOverviewView,
+  'script-guard': ScriptGuardView,
   incidents: IncidentsAdminView,
   database: DatabaseAdminView,
   logs: SystemLogsView,
   seo: SeoSubmitView
 };
 
-/*
- * 数据总览要接快捷操作切面板的事件；
- * 其余面板都用 embedded 让外层统一画标题行。
- */
-const paneProps = (key: PaneKey) => {
-  if (key === 'overview') return { onSwitchTab: handleSwitchTab };
-  return { embedded: true };
-};
-
-/*
- * 已挂载的面板：进后台先把当前面板（默认「数据总览」）挂上，
- * 首屏画完再分批把其余面板在后台挂好 —— 等于一次性把所有面板的数据都加载完，
- * 只是总览那批请求排在前面发出去。
- */
+// 首屏先挂载当前面板，稍后预加载其他常驻面板。
+let warmUpTimer = 0;
 const mountedPanes = ref<PaneKey[]>([active.value]);
 
 const warmUpRestPanes = () => {
-  const rest = PANE_KEYS.filter((key) => key !== active.value && key !== 'overview');
-  // 总览始终排在最前（就算当前落点不是总览，也要让它尽快加载）
-  const queue: PaneKey[] = active.value === 'overview' ? rest : ['overview', ...rest];
-  const BATCH = 4;
-  let cursor = 0;
-
-  const mountNextBatch = () => {
-    const batch = queue.slice(cursor, cursor + BATCH);
-    cursor += BATCH;
-    if (batch.length) mountedPanes.value = [...mountedPanes.value, ...batch];
-    if (cursor < queue.length) window.setTimeout(mountNextBatch, 200);
-  };
-
-  // 先给首屏面板让出 300ms，再开始后台挂载
-  window.setTimeout(mountNextBatch, 300);
+  const rest = PANE_KEYS.filter((key) => key !== 'script-guard' && !mountedPanes.value.includes(key));
+  mountedPanes.value.push(...rest);
 };
 
 // 面板标题：侧边栏只显示名称，这里补一行标题 + 一句提示，让右侧内容有明确的落点
-const SECTIONS: Record<string, { title: string; hint: string }> = {
-  overview: { title: '数据总览', hint: '常用操作入口' },
+const SECTIONS: Record<PaneKey, { title: string; hint: string }> = {
+  'script-guard': { title: '脚本拦截', hint: '拦截记录、封禁与警告页设置' },
   database: { title: '数据管理', hint: '表数据、维护、备份与只读查询' },
   logs: { title: '系统日志', hint: '后台操作记录' },
   incidents: { title: '故障维护', hint: '故障与维护公告' },
   seo: { title: 'SEO 收录', hint: '前台路径提交、IndexNow 与 sitemap' },
 };
 
-const currentSection = computed(() => SECTIONS[active.value] ?? { title: '', hint: '' });
+const currentSection = computed(() => SECTIONS[active.value]);
 
 // 菜单结构（分组 + 图标），宽屏侧边栏和窄屏顶部栏共用
-const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: Component }[] }[] = [
-  { title: '概览', items: [{ key: 'overview', label: '数据总览', icon: DataLine }] },
+const MENU_GROUPS: { title: string; items: { key: PaneKey; label: string; icon: Component }[] }[] = [
   {
     title: '数据',
     items: [
@@ -231,6 +192,7 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
     title: '运维',
     items: [
       { key: 'incidents', label: '故障维护', icon: Warning },
+      { key: 'script-guard', label: '脚本拦截', icon: Lock },
       { key: 'seo', label: 'SEO 收录', icon: Promotion },
     ],
   },
@@ -256,16 +218,7 @@ const toggleMobileGroup = (title: string) => {
   openGroupTitle.value = openGroupTitle.value === title ? null : title;
 };
 
-// 只有一个菜单项的分类（如“概览”）直接进页面，不展开菜单
-const handleGroupClick = (group: { title: string; items: { key: string }[] }) => {
-  if (group.items.length === 1) {
-    selectTopnavItem(group.items[0].key);
-    return;
-  }
-  toggleMobileGroup(group.title);
-};
-
-const selectTopnavItem = (key: string) => {
+const selectTopnavItem = (key: PaneKey) => {
   handleSelect(key);
   openGroupTitle.value = null;
 };
@@ -288,8 +241,9 @@ const handlePageScroll = () => {
   pageScrollRaf = window.requestAnimationFrame(syncPageScrolled);
 };
 
-// 换页（含总览里的快捷操作）时收起展开的分类
-watch(active, () => {
+// 换页时立即挂载目标面板，并收起展开的分类。
+watch(active, (key) => {
+  if (!mountedPanes.value.includes(key)) mountedPanes.value.push(key);
   openGroupTitle.value = null;
 });
 
@@ -361,7 +315,7 @@ const router = useRouter();
 
 // 面板 → 地址栏：用 replace，避免每切一次都往历史里塞一条
 watch(active, (key) => {
-  const nextPane = key === 'overview' ? '' : key;
+  const nextPane = key === DEFAULT_PANE ? '' : key;
   if (String(route.query.pane || '') === nextPane) return;
 
   const query = { ...route.query };
@@ -386,17 +340,12 @@ const scrollToTop = () => {
   });
 };
 
-  const handleSelect = (key: string) => {
-  if (key === active.value) return;
-  active.value = key as typeof active.value;
+const handleSelect = (key: string) => {
+  const pane = PANE_KEYS.find((pane) => pane === key);
+  if (!pane || pane === active.value) return;
+  active.value = pane;
   scrollToTop();
 };
-
-const handleSwitchTab = (tabName: any) => {
-    if (tabName === active.value) return;
-    active.value = tabName;
-    scrollToTop();
-  };
 
   const navMediaQuery = window.matchMedia('(max-width: 900px)');
   const handleNavMediaChange = (event: MediaQueryListEvent) => {
@@ -410,13 +359,14 @@ const handleSwitchTab = (tabName: any) => {
     window.addEventListener('scroll', handlePageScroll, { passive: true });
     syncPageScrolled();
     scheduleMarkTables();
-    warmUpRestPanes();
+    warmUpTimer = window.setTimeout(warmUpRestPanes, 300);
   });
   
   onUnmounted(() => {
     navMediaQuery.removeEventListener('change', handleNavMediaChange);
     window.removeEventListener('resize', scheduleMarkTables);
     window.clearTimeout(markTablesTimer);
+    window.clearTimeout(warmUpTimer);
     document.removeEventListener('click', handleOutsideClick, true);
     window.removeEventListener('scroll', handlePageScroll);
     if (pageScrollRaf) window.cancelAnimationFrame(pageScrollRaf);

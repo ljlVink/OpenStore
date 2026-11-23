@@ -117,10 +117,6 @@ export const getPublicApps = async () => {
 };
 
 // Auth
-export const changeAdminPassword = async (payload: { old_password: string; new_password: string }) => {
-  await api.post('/auth/change-password', payload);
-};
-
 export const loginAdmin = async (payload: { username: string; password: string }) => {
   const { data } = await rawApi.post('/auth/login', payload);
   return data as { token: string };
