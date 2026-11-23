@@ -392,7 +392,7 @@ const previewWarningPage = () =>
   warningPage({
     ip: '203.0.113.47',
     ua: 'AppGalleryData/2.0',
-    path: '/api/v0/apps/list/529?page_size=100',
+    path: '/api/public/apps/browse?tab=categories',
     retryAfterSec: 900,
     strikes: 1
   });
@@ -436,7 +436,7 @@ const triggerBlock = (ip, { ua, path } = {}) => {
 
   const entry = getOrCreateEntry(key);
   const uaText = String(ua || '').trim() || 'OpenStore-Guard-SelfTest/1.0';
-  const pathText = String(path || '').trim() || '/api/v0/apps/list/1?page_size=100';
+  const pathText = String(path || '').trim() || '/api/public/apps/browse';
 
   const { blockMs, strikes } = applyBlock(entry, {
     ip: key,

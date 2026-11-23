@@ -133,4 +133,4 @@ async function searchAppGallery(rawKeyword) {
   return request;
 }
 
-module.exports = { getAppGalleryDiscoverApps, searchAppGallery };
+module.exports = { getAppGalleryDiscoverApps, searchAppGallery, addApp };

@@ -1,5 +1,4 @@
 import axios, { isAxiosError } from 'axios';
-import { hmApi } from './hm-api';
 
 /** 华为应用市场的应用信息（服务端 /api/public/app-detail 实时读取，字段为 snake_case） */
 export interface AppGalleryAppInfo {
@@ -50,198 +49,6 @@ export interface AppGalleryApp {
   versions: AppGalleryVersion[];
 }
 
-export interface NextAppCategory {
-  id?: number;
-  name: string;
-  icon?: string;
-  count?: number;
-  color?: string;
-  /** 该分类分组下的全部别名（来自后台 overview），点进分类时按整组查询 */
-  aliases?: string[];
-}
-
-export interface NextDeviceCount {
-  code: string;
-  name: string;
-  count: number;
-  icon?: string;
-}
-
-interface CacheItem<T> {
-  timestamp: number;
-  data: T;
-}
-
-const CATEGORY_CACHE_TTL = 5 * 60 * 1000;
-const categoriesCache = new Map<string, CacheItem<NextAppCategory[]>>();
-let devicesCache: CacheItem<NextDeviceCount[]> | null = null;
-const overviewInFlight = new Map<string, Promise<any>>();
-
-// Keep the original device mapping so existing UI code can stay unchanged.
-export const DEVICE_MAP: Record<string, number | undefined> = {
-  all: undefined,
-  phone: 0,
-  tablet: 4,
-  tv: 3,
-  watch: 7,
-  pc: 15
-};
-
-const normalizeListResponse = (response: any) => {
-  let list: any[] = [];
-
-  if (Array.isArray(response)) {
-    list = response;
-  } else if (Array.isArray(response?.data)) {
-    list = response.data;
-  } else if (Array.isArray(response?.items)) {
-    list = response.items;
-  } else if (Array.isArray(response?.data?.data)) {
-    list = response.data.data;
-  } else if (Array.isArray(response?.apps)) {
-    list = response.apps;
-  }
-
-  return list.map((item: any) => item?.info || item);
-};
-
-const extractTotal = (response: any) => {
-  return Number(
-    response?.total ??
-    response?.total_count ??
-    response?.data?.total ??
-    response?.data?.total_count ??
-    0
-  );
-};
-
-const getOverviewCacheKey = (device?: number) => (
-  device === undefined || device === null ? 'all' : `device:${device}`
-);
-
-const fetchAppsOverview = async (device?: number) => {
-  const cacheKey = getOverviewCacheKey(device);
-  const cachedCategories = categoriesCache.get(cacheKey);
-  const hasCachedCategories = cachedCategories && Date.now() - cachedCategories.timestamp < CATEGORY_CACHE_TTL;
-  const hasCachedDevices = devicesCache && Date.now() - devicesCache.timestamp < CATEGORY_CACHE_TTL;
-
-  if (hasCachedCategories && hasCachedDevices) {
-    return {
-      categories: cachedCategories?.data || [],
-      devices: devicesCache?.data || []
-    };
-  }
-
-  if (!overviewInFlight.has(cacheKey)) {
-    overviewInFlight.set(cacheKey, axios.get('/api/public/apps/overview', {
-      params: device === undefined || device === null ? undefined : { device }
-    })
-      .then((response) => response?.data?.data || {})
-      .finally(() => {
-        overviewInFlight.delete(cacheKey);
-      }));
-  }
-
-  const data = await overviewInFlight.get(cacheKey);
-  const categories = Array.isArray(data?.categories) ? data.categories : [];
-  const devices = Array.isArray(data?.devices) ? data.devices : [];
-
-  categoriesCache.set(cacheKey, {
-    timestamp: Date.now(),
-    data: categories
-  });
-  devicesCache = {
-    timestamp: Date.now(),
-    data: devices
-  };
-
-  return { categories, devices };
-};
-
-export const getCategories = async (device?: number) => {
-  const cacheKey = getOverviewCacheKey(device);
-  const cachedCategories = categoriesCache.get(cacheKey);
-
-  if (cachedCategories && Date.now() - cachedCategories.timestamp < CATEGORY_CACHE_TTL) {
-    return {
-      data: cachedCategories.data,
-      items: cachedCategories.data
-    };
-  }
-
-  const overview = await fetchAppsOverview(device);
-  const data = overview.categories;
-
-  const sorted = data
-    .filter((item: any) => item.count > 0)
-    .sort((a: NextAppCategory, b: NextAppCategory) => (b.count || 0) - (a.count || 0));
-
-  categoriesCache.set(cacheKey, {
-    timestamp: Date.now(),
-    data: sorted
-  });
-
-  return {
-    data: sorted,
-    items: sorted
-  };
-};
-
-export const getDevices = async () => {
-  if (devicesCache && Date.now() - devicesCache.timestamp < CATEGORY_CACHE_TTL) {
-    return {
-      data: devicesCache.data,
-      items: devicesCache.data
-    };
-  }
-
-  const overview = await fetchAppsOverview();
-  const devices = overview.devices;
-
-  return {
-    data: devices,
-    items: devices
-  };
-};
-
-export const getAppsByCategory = async (
-  categoryName: string,
-  page = 1,
-  size = 20,
-  device?: number,
-  aliases?: string[]
-) => {
-  const apiPage = Math.max(page, 1);
-
-  /*
-   * 分类卡片上的数量是该分类「别名组」的合计（休闲益智 = 休闲益智 + 休闲 + 益智解谜），
-   * 所以列表也必须按整组别名查（kind_name in (...) ），否则会像以前那样
-   * 卡片写 8905，点进去只列出 12 个。
-   */
-  const names = aliases && aliases.length ? aliases : [categoryName];
-  const categoryConditions = names.map((name) => ({ key: 'kind_name', value: name, op: 'eq' }));
-  const categoryExpression =
-    categoryConditions.length > 1 ? { or: categoryConditions } : categoryConditions[0];
-
-  const conditions: any[] = [categoryExpression];
-  if (device !== undefined && device !== null) {
-    conditions.push({ key: 'main_device_codes', value: String(device), op: 'array_contains' });
-  }
-
-  const query = new URLSearchParams({
-    page: String(apiPage),
-    page_size: String(size),
-    detail: 'true'
-  });
-
-  const response = await hmApi.post<any>(`/apps/query?${query.toString()}`, { and: conditions });
-
-  return {
-    data: normalizeListResponse(response),
-    total: extractTotal(response)
-  };
-};
-
 /** 华为应用市场列表条目（发现更多 / 搜索结果） */
 export interface AppGalleryListApp {
   app_id: string;
@@ -253,6 +60,42 @@ export interface AppGalleryListApp {
   version: string;
   size_bytes: number;
 }
+
+export type AppGalleryBrowseTab = 'featured' | 'categories' | 'rankings' | 'updates';
+
+export interface AppGalleryBrowseApp extends AppGalleryListApp {
+  position?: number;
+  notes?: string;
+}
+
+export type AppGalleryBrowse =
+  | { kind: 'categories'; categories: Array<{ name: string; image: string }> }
+  | {
+      kind: 'sections';
+      sections: Array<{
+        title: string;
+        description: string;
+        items: AppGalleryBrowseApp[];
+        rank?: string;
+      }>;
+      hasMore: boolean;
+    }
+  | {
+      kind: 'updates';
+      updates: Array<{ date: string; items: AppGalleryBrowseApp[] }>;
+      hasMore: boolean;
+    };
+
+/** 原生应用市场浏览页；分类和榜单只传名称，由服务端解析。 */
+export const getAppGalleryBrowse = async (params: {
+  tab: AppGalleryBrowseTab;
+  category?: string;
+  rank?: string;
+  page?: number;
+}): Promise<AppGalleryBrowse> => {
+  const { data } = await axios.get<AppGalleryBrowse>('/api/public/apps/browse', { params });
+  return data;
+};
 
 /** 华为应用市场搜索页的「发现更多」 */
 export const getDiscoverApps = async (): Promise<AppGalleryListApp[]> => {
@@ -278,5 +121,3 @@ export const getAppDetail = async (id: string): Promise<AppGalleryApp | null> =>
     throw error;
   }
 };
-
-export default hmApi;

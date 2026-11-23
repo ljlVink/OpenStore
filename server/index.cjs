@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const db = require('./database.cjs');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-// 出站请求统一配置（连接池 / 超时 / 并发闸门），须在 dotenv 之后加载
+// 出站 HTTP 默认配置，须在 dotenv 之后加载
 require('./lib/upstream-http.cjs').applyAxiosDefaults();
 
 // 拆分出去的内部模块（注意：必须在 dotenv.config 之后加载，它们会读 process.env）
@@ -63,8 +63,7 @@ app.use(hardBanGuard);
 // 兼容字面量 null 请求体：
 // axios 在 Content-Type: application/json 下会把 null 序列化成字符串 "null"，
 // body-parser 的 strict 模式只接受对象/数组，会直接抛 SyntaxError 返回 400，
-// 请求会在到达 /api/v0 代理之前就被拒掉。这里放宽 strict，
-// 并把非对象的 body 归一成 {}，既兼容这类客户端，也避免下游解构 req.body 时报错。
+// 将合法 JSON 中的非对象值归一成 {}，避免各写接口解构 req.body 时报错。
 app.use(express.json({ strict: false }));
 app.use((req, res, next) => {
   // 只处理 JSON 请求体，避免影响 multipart 等其它类型的请求
@@ -247,8 +246,7 @@ app.get('/api/v0/charts/rating', (req, res) => {
 });
 /*
  * ---- 路由挂载 ----
- * 顺序就是匹配顺序，必须与拆分前各段路由在原文件里的先后保持一致
- * （例如 /api/v0 相关的中间件要排在通用路由前面）。
+ * 挂载顺序与匹配顺序一致，兜底路由放在业务路由之后。
  * 每个 router 内部写的都是完整路径，所以统一挂在根路径上。
  *
  * 注意：本文件不在这里面注册任何业务路由，全部在 server/routes/ 下。
@@ -263,8 +261,7 @@ const mountRouter = (name, router) => {
   app.use(router);
 };
 
-mountRouter('admin-ops', require('./routes/admin-ops.cjs')()); // 应用总览 / 脚本护栏
-mountRouter('proxy', require('./routes/proxy.cjs'));          // 上游代理：/api/v0 透传
+mountRouter('admin-ops', require('./routes/admin-ops.cjs')()); // 脚本护栏
 mountRouter('media', require('./routes/media.cjs'));          // 应用截图同源代理、文件上传、上传目录
 mountRouter('database', require('./routes/database.cjs'));    // 数据库管理
 mountRouter('incidents', require('./routes/incidents.cjs'));  // 服务事故 / 维护公告

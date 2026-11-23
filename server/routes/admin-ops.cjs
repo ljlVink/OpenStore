@@ -1,36 +1,13 @@
 /*
- * 后台运营接口：应用总览 / 脚本护栏
+ * 后台运营接口：脚本护栏
  */
 const express = require('express');
 const { requireAuth, logAction } = require('../middleware/auth.cjs');
-const { getAppsOverview } = require('../lib/apps-overview.cjs');
 const { previewWarningPage, getPageConfig, savePageConfig, resetPageConfig, DEFAULT_PAGE_CONFIG, getAllowList, saveAllowList, listBlockRecords, clearBlockRecords, unblockIp, scriptGuardSnapshot, triggerBlock, hardBanIp, hardUnbanIp, listHardBans } = require('../lib/script-guard.cjs');
 const { getClientIp } = require('../lib/client-ip.cjs');
 
 module.exports = () => {
   const router = express.Router();
-
-  router.get('/api/public/apps/overview', async (req, res) => {
-    const deviceParam = req.query.device;
-    const deviceCode =
-      deviceParam === undefined || deviceParam === null || deviceParam === ''
-        ? undefined
-        : Number(deviceParam);
-    const cacheKey = deviceCode === undefined || Number.isNaN(deviceCode) ? 'all' : `device:${deviceCode}`;
-
-    try {
-      const { data, cached, stale } = await getAppsOverview(cacheKey, deviceCode);
-      // 客户端/CDN 也缓存一会儿，减少同一批访客的重复请求
-      res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
-      res.json({ success: true, data, cached, stale });
-    } catch (error) {
-      console.error('Failed to build apps overview:', error.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to build apps overview'
-      });
-    }
-  });
 
   /*
    * 脚本护栏的警告页预览：后台「运维 → 脚本拦截」面板用。

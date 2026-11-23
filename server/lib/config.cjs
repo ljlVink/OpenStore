@@ -1,5 +1,5 @@
 /*
- * 进程级配置：代理信任跳数、监听端口、访问上游时的身份标识。
+ * 进程级配置：代理信任跳数、监听端口。
  */
 /*
  * 线上链路是「用户 → 腾讯 EdgeOne(CDN) → nginx → Node」，也就是说前面有 **两层** 代理。
@@ -22,15 +22,4 @@ const TRUST_PROXY_HOPS = (() => {
 })();
 const PORT = process.env.PORT || 3001;
 
-/*
- * 访问应用市场上游时用的 User-Agent —— 全站唯一一处定义，所有打上游的代码都用它。
- *
- * 上游规定：调用 API 必须带 user_agent，标准格式为「应用包名/版本号」
- * （文档里的示例是 top.rayawa.dashboard/2.0.0，那只是示例，本项目的标识见 .env 的 UPSTREAM_USER_AGENT）。
- * 所以这里不能再用浏览器 UA，也不能原样透传访客的 UA —— 上游要的是「谁在调接口」这个身份。
- * 需要换名字/版本号时改 .env 的 UPSTREAM_USER_AGENT 即可，不用动代码。
- */
-const UPSTREAM_USER_AGENT =
-  String(process.env.UPSTREAM_USER_AGENT || '').trim() || 'OpenStore/1.0 (+https://next.betahub.tech)';
-
-module.exports = { TRUST_PROXY_HOPS, PORT, UPSTREAM_USER_AGENT };
+module.exports = { TRUST_PROXY_HOPS, PORT };

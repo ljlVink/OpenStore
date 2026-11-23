@@ -51,8 +51,8 @@ const router = createRouter({
       component: AppCardView,
       meta: { title: '应用列表', description: '应用卡片列表' }
     },
-    // 更新页、专题列表已下线：旧链接（搜索引擎收录、别人分享的）跳到现在的对应页面
-    { path: '/updates', redirect: '/apps' },
+    // 已分享的旧链接跳到当前对应栏目
+    { path: '/updates', redirect: { name: 'apps', query: { tab: 'updates' } } },
     { path: '/updates/app/:id', redirect: (to) => `/apps/${encodeURIComponent(String(to.params.id))}` },
     { path: '/topics', redirect: '/' },
     {

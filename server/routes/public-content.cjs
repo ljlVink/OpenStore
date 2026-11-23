@@ -6,8 +6,16 @@ const db = require('../database.cjs');
 const { getAppGalleryTopic, getAppGalleryExplore } = require('../lib/appgallery-topics.cjs');
 const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
 const { getAppGalleryDiscoverApps, searchAppGallery } = require('../lib/appgallery-lists.cjs');
+const { getAppGalleryBrowse } = require('../lib/appgallery-browse.cjs');
 
 const router = express.Router();
+const BROWSE_TABS = ['featured', 'categories', 'rankings', 'updates'];
+
+function isBrowseLabel(value, allowed) {
+  return value === undefined || (
+    allowed && typeof value === 'string' && value.length <= 80 && value.trim().length > 0
+  );
+}
 
 router.get('/api/public/apps', (req, res) => {
   db.all(`SELECT id, name, provider, bg_url, icon_url, download_url, enabled, kind_name,
@@ -16,6 +24,31 @@ router.get('/api/public/apps', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });
+});
+
+router.get('/api/public/apps/browse', async (req, res) => {
+  const { tab = 'featured', category, rank, page = '1' } = req.query;
+  if (!BROWSE_TABS.includes(tab) ||
+      !isBrowseLabel(category, tab === 'categories') ||
+      !isBrowseLabel(rank, tab === 'rankings') ||
+      typeof page !== 'string' || !/^[1-5]$/.test(page) ||
+      (page !== '1' && ((tab === 'categories' && !category) || (tab === 'rankings' && !rank)))) {
+    return res.status(400).json({ error: '无效的应用栏目或页码' });
+  }
+
+  try {
+    const content = await getAppGalleryBrowse({
+      tab,
+      category: category?.trim(),
+      rank: rank?.trim(),
+      page: Number(page)
+    });
+    if (!content) return res.status(404).json({ error: '华为应用市场未提供此分类或榜单' });
+    res.json(content);
+  } catch (error) {
+    console.warn('[appgallery-browse] 栏目查询失败：', tab, error.message);
+    res.status(502).json({ error: '无法加载华为应用市场栏目' });
+  }
 });
 
 // 应用列表：华为应用市场搜索页的「发现更多」

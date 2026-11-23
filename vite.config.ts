@@ -91,12 +91,6 @@ export default defineConfig(({ mode }) => {
      */
     server: {
       proxy: {
-        '/api/v0': {
-          // 走本地 Node 代理（而不是直连上游）：
-          // 这样后端能看到并记录每一次上游调用（UA 透传、限流、实时日志都在 Node 侧）
-          target: `http://localhost:${env.PORT || 3001}`,
-          changeOrigin: true,
-        },
         '/api': {
           target: `http://localhost:${env.PORT || 3001}`,
           changeOrigin: true,
