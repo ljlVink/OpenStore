@@ -58,7 +58,7 @@ const buildAppJsonLd = (info, context = {}) => {
   if (kindType || kindName) data.applicationCategory = [kindType, kindName].filter(Boolean).join(' / ');
   if (info.version) data.softwareVersion = String(info.version);
 
-  const developer = String(info.developer_name || info.dev_en_name || info.supplier || '').trim();
+  const developer = String(info.developer_name || '').trim();
   if (developer) data.author = { '@type': 'Organization', name: developer };
 
   // 免费/付费：price 为 "0" 视为免费
@@ -67,8 +67,8 @@ const buildAppJsonLd = (info, context = {}) => {
     data.offers = { '@type': 'Offer', price, priceCurrency: 'CNY' };
   }
 
-  const rating = positiveNumber(info.info_score) || positiveNumber(info.full_average_rating) || positiveNumber(info.average_rating);
-  const ratingCount = positiveNumber(info.total_star_rating_count) || positiveNumber(info.info_rate_count);
+  const rating = positiveNumber(info.full_average_rating) || positiveNumber(info.average_rating);
+  const ratingCount = positiveNumber(info.total_star_rating_count);
   if (rating && ratingCount) {
     data.aggregateRating = {
       '@type': 'AggregateRating',

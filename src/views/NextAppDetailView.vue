@@ -404,13 +404,10 @@ const toggleIntro = () => {
 /** 应用更新时间：当前版本的发布时间（release_date，毫秒时间戳） */
 const updatedAtText = computed(() => formatDate(appDetail.value?.release_date || 0));
 
-/** API 级别：拆成两枚胶囊「最小 21」「目标 24」 */
+/** API 级别：最小 API（客户端接口不提供目标 API） */
 const sdkPills = computed(() => {
-  const detail = appDetail.value;
-  const parts: string[] = [];
-  if (detail?.minsdk) parts.push(`最小 ${detail.minsdk}`);
-  if (detail?.target_sdk) parts.push(`目标 ${detail.target_sdk}`);
-  return parts;
+  const minsdk = appDetail.value?.minsdk;
+  return minsdk ? [`最小 ${minsdk}`] : [];
 });
 
 const formatSize = (bytes: number | string) => {

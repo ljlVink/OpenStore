@@ -1,4 +1,9 @@
-const { openWebSession, callClient, expectOk, text, array, cardKind } = require('./appgallery-client.cjs');
+/*
+ * 探索页与专题：只用鸿蒙客户端接口（与真机应用市场一致），按平板版取。
+ * 专题页 substancedetail|<id> 不一定自带标题和应用：「本周热门应用」这类榜单在客户端里只是探索页的一张卡片，
+ * 专题页只有分享卡；缺的标题、副标题、应用从探索页同 id 的卡片里补。
+ */
+const { callClient, text, array, cardKind } = require('./appgallery-client.cjs');
 
 const HEADER_CARDS = new Set([
   'subjectappbigcard.landing', 'scenariolistcard.landing',
@@ -63,16 +68,33 @@ function parseCards(cards, topic, apps) {
   }
 }
 
+/** 专题页里的分享标题（顶部分享卡或正文里的分享卡） */
+function shareTitleOf(page, cards) {
+  const shareCards = [page.data?.cardTitle, ...cards.filter((card) => cardKind(card) === 'substancesharecard')];
+  for (const card of shareCards) {
+    const title = text(array(card?.data)[0]?.shareInfo?.title);
+    if (title) return title;
+  }
+  return '';
+}
+
+/** 探索页里同 id 的卡片；探索页加载失败不影响专题本身 */
+async function exploreTopic(id) {
+  try {
+    return (await loadExploreCached()).topics.get(id) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadTopic(id) {
   const signal = AbortSignal.timeout(12_000);
-  const webPost = await openWebSession(signal);
-  const post = async (path, body) => expectOk(await webPost(path, body), path);
+  const call = (method, params) => callClient(method, params, { device: EXPLORE_DEVICE, signal });
 
-  const response = await post('/harmony/page-detail', {
-    pageId: `webAgSubstanceDetail|${id}`, pageNum: 1, pageSize: 100,
-    clientPackage: 'com.huawei.hmsapp.appgallery', accountZone: 'CN', zone: '', locale: 'zh',
-    businessParam: { animation: 0 }
-  });
+  const [response, fromExplore] = await Promise.all([
+    call('client.getPageDetail', { pageId: `substancedetail|${id}`, pageNum: 1, pageSize: 25 }),
+    exploreTopic(id)
+  ]);
   const page = array(response.pages).find((item) => cardKind(item) === 'substancedetailpage');
   if (!page) throw new Error('AppGallery returned an unexpected topic page');
   let cardList = page.data?.cardlist;
@@ -82,19 +104,24 @@ async function loadTopic(id) {
 
   const topic = { substance_id: id, title: '', subtitle: '', description: '' };
   const apps = new Map();
+  const cards = [...cardList.layoutData];
   parseCards(cardList.layoutData, topic, apps);
   const dataId = text(cardList.dataId);
   for (let pageNum = 2; Number(cardList.hasMore) > 0; pageNum++) {
     if (!dataId || pageNum > MAX_PAGES) throw new Error('AppGallery topic pagination did not terminate');
-    cardList = await post('/harmony/card-list', { dataId, locale: 'zh', pageNum, pageSize: 25 });
+    cardList = await call('client.getCardList', { dataId, pageNum, pageSize: 25 });
     if (!Array.isArray(cardList.layoutData)) throw new Error('AppGallery returned an invalid topic card page');
+    cards.push(...cardList.layoutData);
     parseCards(cardList.layoutData, topic, apps);
   }
-  topic.title ||= text(page.data?.extraData?.shareInfo?.title);
+
+  topic.title ||= fromExplore?.title || shareTitleOf(page, cards);
+  topic.subtitle ||= fromExplore?.subtitle || '';
   if (!topic.title) throw new Error('AppGallery topic has no title');
+  const list = apps.size ? apps : fromExplore?.apps || apps;
   return {
     ...topic,
-    apps: Array.from(apps.values(), (app) => ({ ...app, name: app.name || app.pkg_name || app.app_id }))
+    apps: Array.from(list.values(), (app) => ({ ...app, name: app.name || app.pkg_name || app.app_id }))
   };
 }
 
@@ -113,8 +140,11 @@ function exploreApps(item, limit) {
   return Array.from(apps.values());
 }
 
-/** 探索页的一个栏目（「排行与佳作」等；无标题的栏目 title 为空）；seen 用来跨页去重 */
-function parseExploreGroup(group, seen) {
+/**
+ * 探索页的一个栏目（「排行与佳作」等；无标题的栏目 title 为空）；seen 用来跨页去重。
+ * topics 记下每个专题卡片的完整标题与应用，给专题页兜底。
+ */
+function parseExploreGroup(group, seen, topics) {
   const cards = [];
   for (const card of array(group?.data?.[0]?.layoutData)) {
     const kind = EXPLORE_CARD_KINDS[cardKind(card)];
@@ -125,6 +155,12 @@ function parseExploreGroup(group, seen) {
       const key = substanceId || `${kind}:${title}`;
       if (!title || seen.has(key)) continue;
       seen.add(key);
+      if (substanceId) {
+        const apps = new Map();
+        addApp(apps, item.refs_app);
+        for (const row of [...array(item.refsList_app_short), ...array(item.refsList_app)]) addApp(apps, row);
+        topics.set(substanceId, { title, subtitle: text(item.subTitle), apps });
+      }
       const image = text(item.imgUrl);
       const color = text(item.informationBarColor);
       cards.push({
@@ -157,10 +193,11 @@ async function loadExplore() {
   if (!Array.isArray(cardList?.layoutData)) throw new Error('AppGallery returned an invalid explore page');
 
   const sections = [];
+  const topics = new Map();
   const seen = new Set();
   const addGroups = (groups) => {
     for (const group of groups) {
-      const section = parseExploreGroup(group, seen);
+      const section = parseExploreGroup(group, seen, topics);
       if (section.cards.length) sections.push(section);
     }
   };
@@ -177,19 +214,23 @@ async function loadExplore() {
     if (Array.isArray(cardList.setCookie)) cookies = cardList.setCookie;
   }
   if (!sections.length) throw new Error('AppGallery explore page lists no topics');
-  return sections;
+  return { sections, topics };
 }
 
-/** 华为应用市场「探索」页：按栏目分组的专题卡片 */
-async function getAppGalleryExplore() {
-  if (explore?.expiresAt > Date.now()) return explore.sections;
-  exploreRequest ||= loadExplore().then((sections) => {
-    explore = { sections, expiresAt: Date.now() + EXPLORE_TTL_MS };
-    return sections;
+function loadExploreCached() {
+  if (explore?.expiresAt > Date.now()) return Promise.resolve(explore);
+  exploreRequest ||= loadExplore().then((loaded) => {
+    explore = { ...loaded, expiresAt: Date.now() + EXPLORE_TTL_MS };
+    return explore;
   }).finally(() => {
     exploreRequest = null;
   });
   return exploreRequest;
+}
+
+/** 华为应用市场「探索」页：按栏目分组的专题卡片 */
+async function getAppGalleryExplore() {
+  return (await loadExploreCached()).sections;
 }
 
 async function getAppGalleryTopic(id) {

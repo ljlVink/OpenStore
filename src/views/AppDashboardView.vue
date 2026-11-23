@@ -40,11 +40,6 @@
           </div>
           <div class="meta-pill with-watermark">
             <span class="meta-pill-watermark">API</span>
-            <span class="meta-pill-label">目标</span>
-            <span class="meta-pill-value">{{ appDetail.target_sdk || '—' }}</span>
-          </div>
-          <div class="meta-pill with-watermark">
-            <span class="meta-pill-watermark">API</span>
             <span class="meta-pill-label">最小</span>
             <span class="meta-pill-value">{{ appDetail.minsdk || '—' }}</span>
           </div>
@@ -151,10 +146,6 @@
               <div class="meta-kv-key">版本</div>
               <div class="meta-kv-value" :title="appDetail.version">{{ appDetail.version || '—' }}</div>
             </div>
-            <div class="meta-kv">
-              <div class="meta-kv-key">编译 API</div>
-              <div class="meta-kv-value" :title="String(appDetail.compile_sdk_version || '—')">{{ appDetail.compile_sdk_version || '—' }}</div>
-            </div>
           </div>
         </div>
       </div>
@@ -164,27 +155,6 @@
         <div class="chip-container">
           <el-tag v-for="device in deviceLabels" :key="device" class="chip">{{ device }}</el-tag>
           <el-tag v-if="deviceLabels.length === 0" type="info" class="chip">—</el-tag>
-        </div>
-      </div>
-      
-      <div class="section-container">
-        <div class="section-header">
-          <h3>发布地区</h3>
-          <el-button
-            v-if="isCountryListLong"
-            link
-            class="section-toggle-btn"
-            @click="toggleCountries"
-          >
-            <el-icon :class="{ 'is-expanded': showFullCountries }"><ArrowDown /></el-icon>
-          </el-button>
-        </div>
-        <div 
-          ref="countryContainerRef"
-          :class="['chip-container', { 'is-collapsed': isCountryListLong && !showFullCountries }]"
-        >
-          <el-tag v-for="country in countryLabels" :key="country" class="chip">{{ country }}</el-tag>
-          <el-tag v-if="countryLabels.length === 0" type="info" class="chip">—</el-tag>
         </div>
       </div>
     </div>
@@ -251,16 +221,10 @@ const descriptionRef = ref<HTMLElement | null>(null);
 const showFullDescription = ref(false);
 const isDescriptionLong = ref(false);
 
-const countryContainerRef = ref<HTMLElement | null>(null);
-const showFullCountries = ref(false);
-const isCountryListLong = ref(false);
-
 /**
  * 应用截图。
  *
- * 只用上游的 `new_screen_shots`（{ url, resolution, rotated }）：
- * 旧的 `screen_shots` 数组里是不带设备段的 `screenshutN/xxx.jpg`，
- * 实测这些地址现在全部 403，直连只会得到一堆裂图。
+ * 用上游的 `new_screen_shots`（{ url, resolution, rotated }，优先手机版截图）。
  * 另外 CDN 没有 Referer 校验，但这里仍然统一加 `referrerpolicy="no-referrer"`，
  * 并且任何一张加载失败就从列表里摘掉 —— 全部失败时整个区块自动消失，不显示裂图。
  */
@@ -402,22 +366,7 @@ const toggleDescription = () => {
   showFullDescription.value = !showFullDescription.value;
 };
 
-const toggleCountries = () => {
-  showFullCountries.value = !showFullCountries.value;
-};
-
-const checkCountryOverflow = () => {
-  if (!countryContainerRef.value) return;
-  const el = countryContainerRef.value;
-  requestAnimationFrame(() => {
-    // Approx 3 lines of tags (32px height + 8px gap) * 3 = 120px
-    // Use slightly larger threshold to be safe
-    isCountryListLong.value = el.scrollHeight > 125;
-  });
-};
-
 let descObserver: ResizeObserver | null = null;
-let countryObserver: ResizeObserver | null = null;
 
 const initObservers = () => {
   if (descriptionRef.value && !descObserver) {
@@ -429,34 +378,12 @@ const initObservers = () => {
     });
     descObserver.observe(descriptionRef.value);
   }
-  
-  if (countryContainerRef.value && !countryObserver) {
-    countryObserver = new ResizeObserver(() => {
-      if (!showFullCountries.value && !countryContainerRef.value?.classList.contains('is-collapsed')) {
-        checkCountryOverflow();
-      }
-    });
-    countryObserver.observe(countryContainerRef.value);
-  }
 };
 
 const deviceLabels = computed(() => {
   if (!appDetail.value) return [];
   const deviceCodes = appDetail.value.main_device_codes.map((c) => String(c).trim()).filter(Boolean);
   return deviceCodes.map((c: string) => DEVICE_CODE_MAP[c] ?? DEVICE_CODE_MAP[String(Number(c))] ?? `设备代码 ${c}`);
-});
-
-const countryLabels = computed(() => {
-  if (!appDetail.value) return [];
-  const countryCodes = appDetail.value.release_countries.map((c) => String(c).trim().toUpperCase()).filter(Boolean);
-  
-  let regionDisplay: Intl.DisplayNames | undefined;
-  try { regionDisplay = new Intl.DisplayNames(['zh-CN'], { type: 'region' }); } catch {}
-  
-  return countryCodes.map((code: string) => {
-    if (code === 'CN') return '中国';
-    return regionDisplay?.of(code) || code;
-  });
 });
 
 const categoryInfo = computed(() => {
@@ -511,11 +438,9 @@ const structuredData = computed(() => {
 
 watch(appDetail, () => {
   showFullDescription.value = false;
-  showFullCountries.value = false;
   // Wait for DOM updates then check and init observers
   nextTick(() => {
     checkDescriptionOverflow();
-    checkCountryOverflow();
     setTimeout(initObservers, 100);
   });
 }, { deep: true, immediate: true });
@@ -546,7 +471,6 @@ onUnmounted(() => {
     scriptTag.value = null;
   }
   descObserver?.disconnect();
-  countryObserver?.disconnect();
   clearPageShareMeta();
 });
 
@@ -1140,22 +1064,6 @@ watch(
   }
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-header h3 {
-  margin: 0;
-}
-
-.section-toggle-btn {
-  padding: 0;
-  font-size: 14px;
-}
-
 .section-container h3 {
   font-size: 18px;
   margin-bottom: 12px;
@@ -1257,18 +1165,11 @@ watch(
   gap: 4px;
 }
 
-.chip-container.is-collapsed {
-  max-height: 120px;
-  overflow: hidden;
-}
-
-.section-toggle .el-icon,
-.section-toggle-btn .el-icon {
+.section-toggle .el-icon {
   transition: transform 0.3s;
 }
 
-.section-toggle .el-icon.is-expanded,
-.section-toggle-btn .el-icon.is-expanded {
+.section-toggle .el-icon.is-expanded {
   transform: rotate(180deg);
 }
 

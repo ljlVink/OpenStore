@@ -6,18 +6,14 @@ export interface AppGalleryAppInfo {
   name: string;
   pkg_name: string;
   developer_name: string;
-  dev_en_name: string;
-  supplier: string;
   kind_name: string;
+  /** 应用 / 游戏 */
   kind_type_name: string;
-  tag_name: string | null;
   icon_url: string;
-  screen_shots: string[];
   new_screen_shots: Array<{ url: string; resolution?: string; rotated?: string | number }>;
   brief_desc: string;
   description: string;
   privacy_url: string;
-  release_countries: string[];
   main_device_codes: string[];
   version: string;
   version_code: number;
@@ -26,9 +22,7 @@ export interface AppGalleryAppInfo {
   /** 当前版本发布时间（毫秒） */
   release_date: number;
   new_features: string;
-  target_sdk: number;
   minsdk: number;
-  compile_sdk_version: number;
   min_hmos_api_level: number;
   average_rating?: number;
   total_star_rating_count?: number;

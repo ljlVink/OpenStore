@@ -17,7 +17,7 @@ describe('应用结构化数据', () => {
     version: '1.2.55',
     developer_name: '上海胖布丁网络科技有限公司',
     price: '0',
-    info_score: '4.5',
+    average_rating: 4.5,
     total_star_rating_count: 243
   };
   const ctx = { url: 'https://x.test/apps/1', image: 'https://x.test/i.png' };
@@ -46,14 +46,14 @@ describe('应用结构化数据', () => {
   });
 
   it('缺少计数的评分不输出（避免无效的 AggregateRating）', () => {
-    const ld = buildAppJsonLd({ name: 'x', info_score: '4.5' }, ctx);
+    const ld = buildAppJsonLd({ name: 'x', average_rating: 4.5 }, ctx);
     expect(ld.aggregateRating).toBeUndefined();
   });
 
   it('评分或计数非法时忽略', () => {
-    expect(buildAppJsonLd({ name: 'x', info_score: '0', total_star_rating_count: 10 }, ctx).aggregateRating).toBeUndefined();
-    expect(buildAppJsonLd({ name: 'x', info_score: 'abc', total_star_rating_count: 10 }, ctx).aggregateRating).toBeUndefined();
-    expect(buildAppJsonLd({ name: 'x', info_score: '4.5', total_star_rating_count: 0 }, ctx).aggregateRating).toBeUndefined();
+    expect(buildAppJsonLd({ name: 'x', average_rating: 0, total_star_rating_count: 10 }, ctx).aggregateRating).toBeUndefined();
+    expect(buildAppJsonLd({ name: 'x', average_rating: 'abc', total_star_rating_count: 10 }, ctx).aggregateRating).toBeUndefined();
+    expect(buildAppJsonLd({ name: 'x', average_rating: 4.5, total_star_rating_count: 0 }, ctx).aggregateRating).toBeUndefined();
   });
 
   it('免费应用输出 price=0', () => {
