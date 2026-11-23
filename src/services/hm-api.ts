@@ -1,13 +1,4 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import { translateAppsListCall } from './upstream-compat';
-
-interface CacheItem<T> {
-  data: T;
-  timestamp: number;
-}
-
-/** 应用列表的缓存时长：够新，又能挡掉重复请求 */
-const LIST_TTL_MS = 45_000;
 
 interface HmApiClientConfig {
   baseUrl: string;
@@ -16,14 +7,12 @@ interface HmApiClientConfig {
 }
 
 /**
- * HarmonyOS 应用市场 API 客户端：本站代理优先，按路径缓存 + 并发去重。
+ * HarmonyOS 应用市场 API 客户端：走本站代理。
  * 降级默认关闭（要启用配 VITE_API_FALLBACK），否则被封后前端会静默直连上游。
  */
 class HmApiClient {
   private primaryBaseUrl: string;
   private fallbackUrl: string;
-  private cache: Map<string, CacheItem<any>> = new Map();
-  private inFlight: Map<string, Promise<any>> = new Map();
 
   /** 主线路最近一次失败时间；冷却期内先走备用线路，冷却结束再试主线路 */
   private primaryFailedAt = 0;
@@ -78,78 +67,6 @@ class HmApiClient {
 
     console.error(`[HmApi] All endpoints failed for ${label}`, lastError);
     throw lastError;
-  }
-
-  private getCacheKey(path: string, params?: any): string {
-    const queryString = params
-      ? Object.entries(params)
-          .filter(([_, v]) => v !== undefined && v !== null)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([k, v]) => `${k}=${String(v)}`)
-          .join('&')
-      : '';
-    return `${path}?${queryString}`;
-  }
-
-  /** 缓存时长（毫秒）：应用列表 / 按条件查询的应用集 45s，其余不缓存 */
-  private guessTtlMs(path: string): number {
-    if (path.includes('apps/list')) return LIST_TTL_MS;
-    if (path.includes('apps/query')) return LIST_TTL_MS;
-    return 0; // 默认不缓存
-  }
-
-  /** 清缓存（不传参数 = 全清）；后台改内容后调用，不用干等 TTL 过期 */
-  public clearCache(match?: (key: string) => boolean) {
-    if (!match) {
-      this.cache.clear();
-      return;
-    }
-    for (const key of [...this.cache.keys()]) {
-      if (match(key)) this.cache.delete(key);
-    }
-  }
-
-  public async get<T>(path: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    const cacheKey = this.getCacheKey(normalizedPath, params);
-    const ttl = this.guessTtlMs(normalizedPath);
-
-    if (ttl > 0) {
-      const cached = this.cache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < ttl) {
-        return cached.data;
-      }
-    }
-
-    // 同一个请求正在飞：直接复用，避免并发打上游
-    if (this.inFlight.has(cacheKey)) {
-      return this.inFlight.get(cacheKey) as Promise<T>;
-    }
-
-    // /apps/list/<n> 统一翻译成 /apps/query（POST），避开被上游风控的接口
-    const translated = translateAppsListCall(normalizedPath, params);
-    const requestPath = translated ? translated.path : normalizedPath;
-    const requestPromise = this.sendWithFailover(requestPath, (baseUrl) => {
-      const url = `${baseUrl}${requestPath}`;
-      return translated
-        ? axios.post<T>(url, translated.body, {
-            ...config,
-            headers: { 'Content-Type': 'application/json', ...(config?.headers || {}) }
-          })
-        : axios.get<T>(url, { ...config, params });
-    });
-
-    this.inFlight.set(cacheKey, requestPromise);
-
-    try {
-      const data = await requestPromise;
-      if (ttl > 0) {
-        this.cache.set(cacheKey, { data, timestamp: Date.now() });
-      }
-      return data;
-    } finally {
-      this.inFlight.delete(cacheKey);
-    }
   }
 
   public async post<T>(path: string, data?: any, config?: AxiosRequestConfig): Promise<T> {

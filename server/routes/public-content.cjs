@@ -1,12 +1,11 @@
 /*
- * 前台公开内容：推荐应用、应用列表与搜索、应用详情、专题和公告
+ * 前台公开内容：应用卡片、应用列表与搜索、应用详情、专题
  */
 const express = require('express');
 const db = require('../database.cjs');
 const { getAppGalleryTopic, getAppGalleryExplore } = require('../lib/appgallery-topics.cjs');
 const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
 const { getAppGalleryDiscoverApps, searchAppGallery } = require('../lib/appgallery-lists.cjs');
-const { loadBlockedAppPackages } = require('../lib/blocked-apps.cjs');
 
 const router = express.Router();
 
@@ -19,20 +18,17 @@ router.get('/api/public/apps', (req, res) => {
   });
 });
 
-// 应用列表：华为应用市场搜索页的「发现更多」；后台屏蔽的应用不出现在列表里
+// 应用列表：华为应用市场搜索页的「发现更多」
 router.get('/api/public/apps/discover', async (req, res) => {
   try {
-    const apps = await getAppGalleryDiscoverApps();
-    loadBlockedAppPackages((blocked) => {
-      res.json({ items: apps.filter((app) => !blocked.has(app.pkg_name.toLowerCase())) });
-    });
+    res.json({ items: await getAppGalleryDiscoverApps() });
   } catch (error) {
     console.warn('[appgallery-lists] 发现更多查询失败：', error.message);
     res.status(502).json({ error: '无法加载华为应用市场应用列表' });
   }
 });
 
-// 搜索：实时查华为应用市场，被屏蔽的应用仍能搜到
+// 搜索：实时查华为应用市场
 router.get('/api/public/apps/search', async (req, res) => {
   try {
     const items = await searchAppGallery(req.query.q);
@@ -75,24 +71,6 @@ router.get('/api/public/topics/:id', async (req, res) => {
     console.warn('[appgallery-topics] 专题查询失败：', req.params.id, error.message);
     res.status(502).json({ error: '无法加载华为应用市场专题' });
   }
-});
-
-// Public announcements
-router.get('/api/public/announcements', (req, res) => {
-  const limit = Number(req.query.limit || 20); // Increased limit to ensure we get varied categories
-  db.all(
-    `SELECT a.id, a.title, a.content_html, a.published_at, a.updated_at, a.category_id, c.name as category_name 
-     FROM announcements a 
-     LEFT JOIN announcement_categories c ON a.category_id = c.id 
-     WHERE a.status='published' 
-     ORDER BY a.published_at DESC, a.updated_at DESC 
-     LIMIT ?`,
-    [limit],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ items: rows });
-    }
-  );
 });
 
 module.exports = router;
