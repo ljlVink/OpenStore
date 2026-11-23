@@ -803,7 +803,10 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
 .footer-nav {
   position: relative;
   width: auto;
-  min-width: 320px;
+  /*
+    不设 min-width：主入口只有两个，比最小宽度窄时 justify-content: center 会把它们
+    摆在中间，悬停展开次级入口一撑满又会挤回左边，主入口跟着来回跳，滑块也就对不上了。
+  */
   max-width: 90vw;
   height: auto;
   padding: 6px 8px;
@@ -823,7 +826,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   /*
     次级入口就是同一条胶囊的一部分：收起时宽度 0（被裁掉），
     展开时把胶囊整体往右拉长。负外边距抵消父级 flex gap，
-    保证收起态的胶囊宽度和以前一模一样（398px）。
+    保证收起态的胶囊宽度只由主入口决定。
   */
   position: relative;
   display: flex;
