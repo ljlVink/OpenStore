@@ -160,6 +160,12 @@ const pages = ref<PageProbe[]>([
     probePath: '/api/public/explore',
   }),
   createProbe<PageProbe>({
+    key: 'games',
+    name: '游戏',
+    route: '/games',
+    probePath: '/api/public/apps/browse?catalog=games&tab=categories',
+  }),
+  createProbe<PageProbe>({
     key: 'apps',
     name: '应用',
     route: '/apps',

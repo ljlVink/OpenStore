@@ -7,6 +7,8 @@ const browsePath = require.resolve('../../server/lib/appgallery-browse.cjs');
 
 const pages = {
   apps: '7be8792c470c4318bfc25379659b0fcb',
+  games: '8d6d47ad929a4bd59e67839ab73acbc2',
+  gameRankings: 'ebce18494e5343b2b8507887d841768b',
   featured: '6be6cf16799340ea8c999fbe7fe0f78b',
   categories: '9b02fa68964c445d92884e21cade8938',
   categoryDetail: '645d811a7d374220bc37be0b56053f23',
@@ -31,12 +33,14 @@ function startBrowse(respond: (method: string, params: Record<string, any>) => u
     const params = request as Record<string, any>;
     switch (params.pageId) {
       case 'HomePage':
-        return { pages: [tabs([frame('探索', 'home'), frame('元服务', 'atomic'), frame('应用', pages.apps)])] };
+        return { pages: [tabs([frame('探索', 'home'), frame('游戏', pages.games), frame('元服务', 'atomic'), frame('应用', pages.apps)])] };
       case pages.apps:
         return { pages: [tabs([
           frame('精选', pages.featured), frame('分类', pages.categories),
           frame('排行榜', pages.rankings), frame('重磅更新', pages.updates)
         ])] };
+      case pages.games:
+        return { pages: [tabs([frame('排行榜', pages.gameRankings)])] };
       default:
         return respond(String(method), params);
     }
@@ -50,6 +54,25 @@ afterEach(() => {
 });
 
 describe('华为应用市场栏目', () => {
+  it('同名榜单在应用和游戏之间不会混用缓存', async () => {
+    const browse = startBrowse((_method, params) => {
+      const title = '下载榜';
+      if (params.pageId === pages.rankings) {
+        return { pages: [feed('排行榜', [card('vrankingcard', [{ title, list: [app('应用榜首', 'C12345678')] }])])] };
+      }
+      if (params.pageId === pages.gameRankings) {
+        return { pages: [feed('排行榜', [card('vrankingcard', [{ title, list: [app('游戏榜首', 'C12345679')] }])])] };
+      }
+      throw new Error(`Unexpected page: ${params.pageId}`);
+    });
+    const [games, apps] = await Promise.all([
+      browse({ catalog: 'games', tab: 'rankings' }),
+      browse({ tab: 'rankings' })
+    ]);
+    expect(games.sections[0].items[0].name).toBe('游戏榜首');
+    expect(apps.sections[0].items[0].name).toBe('应用榜首');
+  });
+
   it('共享二级页的不同分类仍返回各自的应用', async () => {
     const browse = startBrowse((_method, params) => {
       if (params.pageId === pages.categories) {

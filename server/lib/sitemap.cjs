@@ -8,7 +8,7 @@
 const db = require('../database.cjs');
 
 /** 与 scripts/generate-sitemap.js 的兜底清单保持一致 */
-const STATIC_ROUTES = ['/', '/apps', '/about'];
+const STATIC_ROUTES = ['/', '/games', '/apps', '/about'];
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 /** 详情页条数上限，避免条目过多 */
@@ -17,6 +17,7 @@ const MAX_APP_URLS = 3000;
 /** 静态页在 sitemap 中的优先级 */
 const PRIORITY = {
   '/': '1.0',
+  '/games': '0.8',
   '/apps': '0.8',
   '/about': '0.5'
 };

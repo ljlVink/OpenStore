@@ -6,7 +6,7 @@ import { useLayoutStore } from './stores/layout';
 import { useRouter, useRoute } from 'vue-router';
 import BrandMark from './components/BrandMark.vue';
 import { goBackOrHome } from './utils/route-scroll';
-import { Moon, Sunny, ArrowLeft, Compass, Menu, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
+import { Moon, Sunny, ArrowLeft, Compass, Aim, Menu, Close, Monitor, InfoFilled } from '@element-plus/icons-vue';
 import { useAuthStore } from './stores/auth';
 import { applyPageMeta, pageShareMeta } from './utils/page-share';
 
@@ -145,6 +145,7 @@ const activeTab = shellPath;
 
 const navItems = [
   { path: '/', label: '探索', icon: Compass },
+  { path: '/games', label: '游戏', icon: Aim },
   { path: '/apps', label: '应用', icon: Menu },
 ];
 
@@ -278,16 +279,11 @@ const themeIcon = computed(() => {
   return themeStore.isDark ? Moon : Sunny;
 });
 
-const activeIcon = computed(() => {
-  switch (route.path) {
-    case '/apps':
-      return Menu;
-    case '/about':
-      return InfoFilled;
-    default:
-      return Compass;
-  }
-});
+const activeIcon = computed(() =>
+  navItems.find(item => item.path === activeTab.value)?.icon ??
+  subDockItems.find(item => item.path === activeTab.value)?.icon ??
+  Compass
+);
 
 const navigateTo = (path: string) => {
   router.push(path);
@@ -305,7 +301,7 @@ watch(
     // 专题详情页正文里已经有标题，顶栏不再重复显示
     const isDetailPage = /^\/topics\/[^/]+$/.test(route.path);
     const title = isDetailPage ? '' : ((route.query.title as string) || (route.meta.title as string) || 'CloseStore');
-    const isRoot = ['/', '/apps', '/about'].includes(route.path);
+    const isRoot = navItems.some(item => item.path === route.path) || route.path === '/about';
     /*
      * 返回走 goBackOrHome：优先回上一页，直接输 URL / 刷新进来（没有上一页）时回首页；
      * 之前这里是裸的 router.back()，深链接进来时它什么都不做，返回按钮就失灵了。
@@ -492,21 +488,15 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
       <!-- Popup Menu -->
       <transition name="mobile-menu-fade">
         <div v-if="isMobileMenuOpen" ref="mobileMenuRef" class="mobile-menu-popup">
-          <div 
-            class="mobile-nav-item" 
-            :class="{ active: activeTab === '/' }" 
-            @click="navigateTo('/')"
+          <div
+            v-for="item in navItems"
+            :key="item.path"
+            class="mobile-nav-item"
+            :class="{ active: activeTab === item.path }"
+            @click="navigateTo(item.path)"
           >
-            <el-icon :size="20"><Compass /></el-icon>
-            <span class="mobile-nav-label">探索</span>
-          </div>
-          <div 
-            class="mobile-nav-item" 
-            :class="{ active: activeTab === '/apps' }" 
-            @click="navigateTo('/apps')"
-          >
-            <el-icon :size="20"><Menu /></el-icon>
-            <span class="mobile-nav-label">应用</span>
+            <el-icon :size="20"><component :is="item.icon" /></el-icon>
+            <span class="mobile-nav-label">{{ item.label }}</span>
           </div>
 
           <div class="mobile-menu-divider"></div>
@@ -748,7 +738,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   position: relative;
   width: auto;
   /*
-    不设 min-width：主入口只有两个，比最小宽度窄时 justify-content: center 会把它们
+    不设 min-width：主入口比最小宽度窄时 justify-content: center 会把它们
     摆在中间，悬停展开次级入口一撑满又会挤回左边，主入口跟着来回跳，滑块也就对不上了。
   */
   max-width: 90vw;

@@ -27,17 +27,19 @@ router.get('/api/public/apps', (req, res) => {
 });
 
 router.get('/api/public/apps/browse', async (req, res) => {
-  const { tab = 'featured', category, rank, page = '1' } = req.query;
-  if (!BROWSE_TABS.includes(tab) ||
+  const { catalog = 'apps', tab = 'featured', category, rank, page = '1' } = req.query;
+  if ((catalog !== 'apps' && catalog !== 'games') ||
+      !BROWSE_TABS.includes(tab) ||
       !isBrowseLabel(category, tab === 'categories') ||
       !isBrowseLabel(rank, tab === 'rankings') ||
       typeof page !== 'string' || !/^[1-5]$/.test(page) ||
       (page !== '1' && ((tab === 'categories' && !category) || (tab === 'rankings' && !rank)))) {
-    return res.status(400).json({ error: '无效的应用栏目或页码' });
+    return res.status(400).json({ error: '无效的栏目或页码' });
   }
 
   try {
     const content = await getAppGalleryBrowse({
+      catalog,
       tab,
       category: category?.trim(),
       rank: rank?.trim(),
@@ -46,7 +48,7 @@ router.get('/api/public/apps/browse', async (req, res) => {
     if (!content) return res.status(404).json({ error: '华为应用市场未提供此分类或榜单' });
     res.json(content);
   } catch (error) {
-    console.warn('[appgallery-browse] 栏目查询失败：', tab, error.message);
+    console.warn('[appgallery-browse] 栏目查询失败：', catalog, tab, error.message);
     res.status(502).json({ error: '无法加载华为应用市场栏目' });
   }
 });

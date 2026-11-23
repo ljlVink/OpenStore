@@ -31,7 +31,15 @@ const router = createRouter({
       path: '/apps',
       name: 'apps',
       component: AppsView,
-      meta: { title: '应用', description: '浏览CloseStore所有应用，查找你需要的工具和游戏。' }
+      props: { catalog: 'apps' },
+      meta: { title: '应用', description: '浏览华为应用市场的精选应用、分类、榜单与更新。' }
+    },
+    {
+      path: '/games',
+      name: 'games',
+      component: AppsView,
+      props: { catalog: 'games' },
+      meta: { title: '游戏', description: '浏览华为应用市场的精选游戏、分类、榜单与更新。' }
     },
     {
       path: '/apps/:id',

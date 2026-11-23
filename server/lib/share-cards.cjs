@@ -34,7 +34,8 @@ const PAGE_SHARE_META = {
     description: '发现最新、最热门的鸿蒙应用，探索 CloseStore 的精彩世界。',
     seoDescription: SITE_DEFAULT_DESCRIPTION
   },
-  '/apps': { title: '应用', description: '浏览 CloseStore 全部应用，查找你需要的工具和游戏。' },
+  '/games': { title: '游戏', description: '浏览华为应用市场的精选游戏、分类、榜单与更新。' },
+  '/apps': { title: '应用', description: '浏览华为应用市场的精选应用、分类、榜单与更新。' },
   '/app-cards': { title: '应用列表', description: '应用卡片列表。' },
   '/system-status': { title: '系统状态', description: '监控系统核心服务与接口状态。' },
   '/about': { title: '关于', description: '了解 CloseStore 的开发背景和团队信息。' }

@@ -61,6 +61,7 @@ export interface AppGalleryListApp {
   size_bytes: number;
 }
 
+export type AppGalleryCatalog = 'apps' | 'games';
 export type AppGalleryBrowseTab = 'featured' | 'categories' | 'rankings' | 'updates';
 
 export interface AppGalleryBrowseApp extends AppGalleryListApp {
@@ -88,6 +89,7 @@ export type AppGalleryBrowse =
 
 /** 原生应用市场浏览页；分类和榜单只传名称，由服务端解析。 */
 export const getAppGalleryBrowse = async (params: {
+  catalog: AppGalleryCatalog;
   tab: AppGalleryBrowseTab;
   category?: string;
   rank?: string;

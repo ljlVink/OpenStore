@@ -1,11 +1,12 @@
 /*
- * 平板客户端「应用」四个栏目。按标题解析导航，不依赖会变化的 tab 顺序或页面 ID。
+ * 平板客户端「应用」和「游戏」的四个栏目；按标题解析导航，不依赖固定顺序或页面 ID。
  * 翻页复用内容页的 dataId 和匿名 cookie；会话只在服务端短期缓存，不接受客户端游标。
  */
 const { callClient, text, array, cardKind } = require('./appgallery-client.cjs');
 const { addApp } = require('./appgallery-lists.cjs');
 
 const TAB_TITLES = { featured: '精选', categories: '分类', rankings: '排行榜', updates: '重磅更新' };
+const CATALOG_TITLES = { apps: '应用', games: '游戏' };
 const PAGE_SIZE = 40;
 // 这是有界浏览窗口，不代表上游应用总量；末页不再向前端宣称可继续翻页。
 const MAX_PAGES = 5;
@@ -13,8 +14,7 @@ const TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 64;
 const MAX_IN_FLIGHT = 8;
 const sessions = new Map();
-let navigation = null;
-let navigationRequest = null;
+const navigation = new Map();
 let inFlight = 0;
 
 async function call(method, params) {
@@ -42,24 +42,24 @@ const pageDetail = (pageId, extra = {}) => call('client.getPageDetail', {
 });
 const tabsOf = (page) => array(page.pages).flatMap((item) => array(item?.data?.tab?.list));
 
-async function getNavigation() {
-  if (navigation?.expiresAt > Date.now()) return navigation.tabs;
-  if (navigationRequest) return navigationRequest;
-  navigationRequest = (async () => {
-    const home = await pageDetail('HomePage');
-    const appsId = text(tabsOf(home).find((tab) => text(tab?.title) === '应用')?.frame?.pageId);
-    if (!appsId) throw new Error('AppGallery 应用 tab is missing');
-    const apps = await pageDetail(appsId);
-    const children = tabsOf(apps);
-    const tabs = {};
-    for (const [key, title] of Object.entries(TAB_TITLES)) {
-      tabs[key] = text(children.find((tab) => text(tab?.title) === title)?.frame?.pageId);
-      if (!tabs[key]) throw new Error(`AppGallery ${title} tab is missing`);
-    }
-    navigation = { tabs, expiresAt: Date.now() + TTL_MS };
+const tabPageId = (tabs, title) => text(tabs.find((tab) => text(tab?.title) === title)?.frame?.pageId);
+
+async function getNavigation(catalog = '') {
+  const cached = navigation.get(catalog);
+  if (cached && (cached.request || cached.expiresAt > Date.now())) return cached.request || cached.tabs;
+  const entry = { tabs: null, expiresAt: 0, request: null };
+  entry.request = (async () => {
+    const title = CATALOG_TITLES[catalog];
+    const pageId = catalog ? tabPageId(await getNavigation(), title) : 'HomePage';
+    if (!pageId) throw new Error(`AppGallery ${title} tab is missing`);
+    const tabs = tabsOf(await pageDetail(pageId));
+    if (!tabs.length) throw new Error(`AppGallery ${title || 'HomePage'} navigation is empty`);
+    entry.tabs = tabs;
+    entry.expiresAt = Date.now() + TTL_MS;
     return tabs;
-  })().finally(() => { navigationRequest = null; });
-  return navigationRequest;
+  })().finally(() => { entry.request = null; });
+  navigation.set(catalog, entry);
+  return entry.request;
 }
 
 /** 卡片容器只沿 layoutData 下钻；广告、分类和跳转按钮不会被当成应用行。 */
@@ -164,14 +164,14 @@ function withMore(parsed, cardList, page) {
   return parsed.response;
 }
 
-async function loadSession(tab, category, rank) {
-  const tabs = await getNavigation();
-  let pageId = tabs[tab];
+async function loadSession(catalog, tab, category, rank) {
+  const tabs = await getNavigation(catalog);
+  let pageId = tabPageId(tabs, TAB_TITLES[tab]);
   let title = TAB_TITLES[tab];
   let parseTab = tab;
   let extra = {};
   if (category) {
-    const index = await getSession('categories', '', '');
+    const index = await getSession(catalog, 'categories', '', '');
     const entry = index.categories.get(category);
     if (!entry) return null;
     pageId = entry.pageId;
@@ -180,11 +180,12 @@ async function loadSession(tab, category, rank) {
     // 分类共用 detailId，必须把 subTitle 作为 secKindIds 传给服务端。
     extra = { businessParam: { preferenceInfo: { secKindIds: [entry.secKindId] } } };
   } else if (rank) {
-    const index = await getSession('rankings', '', '');
+    const index = await getSession(catalog, 'rankings', '', '');
     pageId = index.ranks.get(rank);
     if (!pageId) return null;
     title = rank;
   }
+  if (!pageId) throw new Error(`AppGallery ${title} tab is missing`);
   const page = await pageDetail(pageId, extra);
   // 排行榜详情的首个 page 只是标题和分类，实际 normalcard 与翻页游标在子 page。
   for (const panel of array(page.pages)) {
@@ -203,8 +204,8 @@ async function loadSession(tab, category, rank) {
   throw new Error(`AppGallery ${title} content page is invalid`);
 }
 
-async function getSession(tab, category, rank) {
-  const key = JSON.stringify([tab, category, rank]);
+async function getSession(catalog, tab, category, rank) {
+  const key = JSON.stringify([catalog, tab, category, rank]);
   const cached = sessions.get(key);
   if (cached && (cached.request || cached.expiresAt > Date.now())) return cached.request || cached.session;
   sessions.delete(key);
@@ -214,7 +215,7 @@ async function getSession(tab, category, rank) {
     sessions.delete(oldest[0]);
   }
   const entry = { expiresAt: 0, session: null, request: null };
-  entry.request = loadSession(tab, category, rank).then((session) => {
+  entry.request = loadSession(catalog, tab, category, rank).then((session) => {
     entry.session = session;
     entry.expiresAt = Date.now() + TTL_MS;
     if (!session) sessions.delete(key);
@@ -261,8 +262,8 @@ async function getPage(session, page) {
 }
 
 /** 查询参数由路由校验；只有未知分类或榜单名称返回 null。 */
-async function getAppGalleryBrowse({ tab = 'featured', category = '', rank = '', page = 1 } = {}) {
-  const session = await getSession(tab, category, rank);
+async function getAppGalleryBrowse({ catalog = 'apps', tab = 'featured', category = '', rank = '', page = 1 } = {}) {
+  const session = await getSession(catalog, tab, category, rank);
   return session ? getPage(session, page) : null;
 }
 

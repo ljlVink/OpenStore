@@ -1,7 +1,7 @@
 <template>
   <div class="apps-view">
     <header class="apps-header">
-      <h1>应用</h1>
+      <h1>{{ catalogLabel }}</h1>
       <div ref="searchContainer" class="search-container" @focusout="handleSearchFocusOut" @keydown.esc="closeDiscover">
         <form class="search-bar" role="search" @submit.prevent="handleSearch">
           <el-icon><Search /></el-icon>
@@ -47,11 +47,11 @@
       </div>
     </header>
 
-    <nav class="browse-tabs" aria-label="应用浏览">
+    <nav class="browse-tabs" :aria-label="`${catalogLabel}浏览`">
       <RouterLink
         v-for="tab in tabs"
         :key="tab.key"
-        :to="{ path: '/apps', query: { tab: tab.key } }"
+        :to="{ path: browsePath, query: { tab: tab.key } }"
         :class="['browse-tab', { active: activeTab === tab.key }]"
         :aria-current="activeTab === tab.key ? 'page' : undefined"
       >
@@ -68,7 +68,7 @@
     <main class="browse-content" :aria-busy="loading">
       <div v-if="loading" class="page-state" role="status">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <p>正在加载{{ isSearch ? '搜索结果' : '应用' }}…</p>
+        <p>正在加载{{ isSearch ? '搜索结果' : catalogLabel }}…</p>
       </div>
       <div v-else-if="errorMessage" class="page-state" role="alert">
         <el-icon><Warning /></el-icon>
@@ -76,7 +76,7 @@
         <p>请稍后重试，或切换其他栏目浏览。</p>
         <button class="pill-button" @click="loadPage">重新加载</button>
       </div>
-      <el-empty v-else-if="isEmpty" :description="isSearch ? '没有找到相关应用，试试其他关键词' : '暂无应用内容'" />
+      <el-empty v-else-if="isEmpty" :description="isSearch ? '没有找到相关应用，试试其他关键词' : `暂无${catalogLabel}内容`" />
 
       <section v-else-if="isSearch" class="app-section" aria-label="搜索结果">
         <div class="app-grid">
@@ -97,7 +97,7 @@
         <RouterLink
           v-for="(category, index) in browse.categories"
           :key="category.name"
-          :to="{ path: '/apps', query: { tab: 'categories', category: category.name } }"
+          :to="{ path: browsePath, query: { tab: 'categories', category: category.name } }"
           class="category-card"
           :style="{ backgroundColor: categoryColors[index % categoryColors.length] }"
         >
@@ -115,7 +115,7 @@
             </div>
             <RouterLink
               v-if="section.rank"
-              :to="{ path: '/apps', query: { tab: 'rankings', rank: section.rank } }"
+              :to="{ path: browsePath, query: { tab: 'rankings', rank: section.rank } }"
               class="see-all"
             >查看全部 <el-icon><ArrowRight /></el-icon></RouterLink>
           </header>
@@ -175,11 +175,14 @@ import { ArrowLeft, ArrowRight, CircleClose, Grid, Loading, Picture, Refresh, Se
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import {
   getAppGalleryBrowse, getDiscoverApps, searchApps,
-  type AppGalleryBrowse, type AppGalleryBrowseTab, type AppGalleryListApp
+  type AppGalleryBrowse, type AppGalleryBrowseTab, type AppGalleryCatalog, type AppGalleryListApp
 } from '../services/next-api';
 import { usePageActive } from '../utils/page-active';
 
 defineOptions({ name: 'AppsView' });
+const { catalog } = defineProps<{ catalog: AppGalleryCatalog }>();
+const browsePath = computed(() => `/${catalog}`);
+const catalogLabel = computed(() => catalog === 'games' ? '游戏' : '应用');
 
 const route = useRoute();
 const router = useRouter();
@@ -233,7 +236,7 @@ const appLocation = (app: AppGalleryListApp) => ({
   query: { title: app.name }
 });
 const pageLocation = (page: number) => ({
-  path: '/apps',
+  path: browsePath.value,
   query: { ...route.query, page: page === 1 ? undefined : String(page) }
 });
 const formatUpdateDate = (date: string) => {
@@ -256,6 +259,7 @@ const loadPage = async () => {
       if (id === requestId) searchResults.value = items;
     } else {
       const data = await getAppGalleryBrowse({
+        catalog,
         tab: activeTab.value,
         category: categoryName.value || undefined,
         rank: categoryName.value ? undefined : rankName.value || undefined,
@@ -277,16 +281,16 @@ const loadPage = async () => {
 const handleSearch = () => {
   closeDiscover();
   void router.push({
-    path: '/apps',
+    path: browsePath.value,
     query: { tab: activeTab.value, ...(searchQuery.value.trim() ? { q: searchQuery.value.trim() } : {}) }
   });
 };
 const handleBack = () => {
   const from = (window.history.state as { back?: string } | null)?.back || '';
-  if (from && from.split('?')[0] !== '/apps') {
+  if (from && from.split('?')[0] !== browsePath.value) {
     router.back();
   } else {
-    void router.push({ path: '/apps', query: { tab: activeTab.value } });
+    void router.push({ path: browsePath.value, query: { tab: activeTab.value } });
   }
 };
 
@@ -316,7 +320,7 @@ const handleSearchFocusOut = (event: FocusEvent) => {
 watch(
   () => route.fullPath,
   () => {
-    if (!pageActive.value || route.path !== '/apps') {
+    if (!pageActive.value || route.path !== browsePath.value) {
       ++requestId;
       loadedLocation = '';
       closeDiscover();
@@ -327,7 +331,7 @@ watch(
   { immediate: true }
 );
 onActivated(() => {
-  if (route.path === '/apps' && loadedLocation !== route.fullPath) void loadPage();
+  if (route.path === browsePath.value && loadedLocation !== route.fullPath) void loadPage();
 });
 </script>
 
@@ -358,8 +362,8 @@ button { font: inherit; cursor: pointer; }
 .search-submit, .clear-search { border: 0; background: transparent; color: var(--el-text-color-secondary); }
 .search-submit { padding: 8px 12px; white-space: nowrap; color: var(--el-color-primary); }
 .clear-search { display: flex; padding: 4px; }
-.browse-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; max-width: 880px; margin: 0 auto 28px; }
-.browse-tab { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 8px; border-radius: 999px; background: var(--el-bg-color); color: var(--el-text-color-regular); font-size: 14px; text-decoration: none; transition: background-color 0.15s; }
+.browse-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; max-width: 880px; margin: 0 auto 28px; }
+.browse-tab { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 8px; border-radius: 999px; background: var(--el-bg-color); color: var(--el-text-color-regular); font-size: 14px; white-space: nowrap; text-decoration: none; transition: background-color 0.15s; }
 .browse-tab.active { background: var(--el-text-color-primary); color: var(--el-bg-color); font-weight: 600; }
 .browse-tab:not(.active):hover { background: var(--el-fill-color); }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }
@@ -441,6 +445,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--el-color-primar
 @media (max-width: 540px) {
   .apps-header { align-items: stretch; flex-direction: column; gap: 14px; }
   .search-container { width: 100%; }
+  .browse-tab { padding-inline: 2px; }
+  .browse-tab .el-icon { display: none; }
   .categories-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .category-card { min-height: 88px; }
   .app-grid, .discover-list { grid-template-columns: 1fr; }
