@@ -24,11 +24,6 @@
         <span class="version" v-if="app.version || app.versionName || app.version_name">
           {{ app.version || app.versionName || app.version_name }}
         </span>
-        <!-- 华为列表给的是现成文案（「9,253 万次安装」），原样显示 -->
-        <span class="downloads" v-if="app.download_count_desc">{{ app.download_count_desc }}</span>
-        <span class="downloads" v-else-if="app.down_count || app.download_count || app.download_count_str || app.down_count_desc">
-          {{ downloadText }}次下载
-        </span>
       </div>
     </div>
 
@@ -54,23 +49,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['click']);
-
-/** 下载量：原始数字太大（如 72133336），统一按 亿 / 万 压缩，已经是带单位的字符串就原样用 */
-const downloadText = computed(() => {
-  const raw =
-    props.app?.down_count ??
-    props.app?.download_count ??
-    props.app?.download_count_str ??
-    props.app?.down_count_desc;
-  if (raw === null || raw === undefined || raw === '') return '';
-
-  const normalized = typeof raw === 'number' ? raw : Number(String(raw).replace(/,/g, ''));
-  if (!Number.isFinite(normalized)) return String(raw);
-
-  if (normalized >= 1e8) return `${(normalized / 1e8).toFixed(1).replace(/\.0$/, '')}亿`;
-  if (normalized >= 1e4) return `${(normalized / 1e4).toFixed(1).replace(/\.0$/, '')}万`;
-  return normalized.toLocaleString('zh-CN');
-});
 
 const timeAgo = computed(() => {
   const time =
@@ -216,11 +194,6 @@ const handleClick = () => {
   color: var(--el-text-color-placeholder);
   flex-wrap: nowrap;
   min-width: 0;
-}
-
-.downloads {
-  white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 .version {

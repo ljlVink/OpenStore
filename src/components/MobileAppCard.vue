@@ -38,31 +38,22 @@
     </div>
     
     <div class="mobile-meta-row">
-      <div class="meta-left">
-        <el-rate
-          v-if="rating > 0"
-          v-model="rating"
-          disabled
-          show-score
-          text-color="#ff9900"
-          score-template="{value}"
-          size="small"
-        />
-        <span v-else class="no-rating">暂无评分</span>
-      </div>
-      <div class="meta-right">
-        <div class="stat-item">
-          <el-icon><Download /></el-icon>
-          <span>{{ formatCount(app.download_count || app.down_count || 0) }}</span>
-        </div>
-      </div>
+      <el-rate
+        v-if="rating > 0"
+        v-model="rating"
+        disabled
+        show-score
+        text-color="#ff9900"
+        score-template="{value}"
+        size="small"
+      />
+      <span v-else class="no-rating">暂无评分</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Download } from '@element-plus/icons-vue';
 
 const props = defineProps<{
   app: any;
@@ -92,16 +83,6 @@ const handleSearchByKind = () => {
 const onIconError = (e: Event) => {
   const target = e.target as HTMLImageElement;
   target.src = '/placeholder.png';
-};
-
-const formatCount = (count: number | string) => {
-  if (!count) return '0';
-  const num = Number(count);
-  if (Number.isNaN(num)) return String(count);
-  
-  if (num > 100000000) return (num / 100000000).toFixed(1) + '亿';
-  if (num > 10000) return (num / 10000).toFixed(1) + '万';
-  return num.toString();
 };
 </script>
 
@@ -198,34 +179,15 @@ const formatCount = (count: number | string) => {
 
 .mobile-meta-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px dashed var(--el-border-color-lighter);
 }
 
-.meta-left {
-  display: flex;
-  align-items: center;
-}
-
 .no-rating {
   font-size: 12px;
   color: var(--el-text-color-placeholder);
-}
-
-.meta-right {
-  display: flex;
-  align-items: center;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
 }
 
 :deep(.el-rate) {

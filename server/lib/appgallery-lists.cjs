@@ -41,7 +41,6 @@ function addApp(apps, row) {
     brief_desc: text(row.memo),
     kind_name: text(row.tagName),
     version: text(row.version),
-    download_count_desc: text(row.downCountDesc),
     size_bytes: Number.isFinite(size) && size > 0 ? size : 0
   });
 }

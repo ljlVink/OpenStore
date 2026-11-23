@@ -3,6 +3,8 @@
 # CloseStore
 **CloseStore** 是一个专注于鸿蒙（HarmonyOS）应用发现与分享的第三方应用商店平台
 
+应用列表和详情不展示下载量；分类和设备卡片显示的是应用数量。
+
 本项目基于 [XiaoChuangll/OpenStore](https://github.com/XiaoChuangll/OpenStore)（MIT License）修改。
 </div>
 

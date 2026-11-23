@@ -59,10 +59,6 @@
             </div>
           </div>
           <div class="meta-card">
-            <div class="meta-card-label">总下载量</div>
-            <div class="meta-card-value">{{ formatNumber(appDetail.download_count) }}</div>
-          </div>
-          <div class="meta-card">
             <div class="meta-card-label">大小</div>
             <div class="meta-card-value">{{ formatSize(appDetail.size_bytes) }}</div>
           </div>
@@ -780,7 +776,7 @@ watch(
 
 .meta-row-2 {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -821,10 +817,13 @@ watch(
   gap: 12px;
 }
 
-/* 只有手机才把指标卡降到两列，平板/窄窗口保持四列，避免大片留白 */
+/* 手机两列，内容较长的评分卡占整行 */
 @media (max-width: 600px) {
   .meta-row-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .meta-row-2 .meta-card:first-child {
+    grid-column: 1 / -1;
   }
 }
 

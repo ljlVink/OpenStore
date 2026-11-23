@@ -18,8 +18,7 @@ describe('应用结构化数据', () => {
     developer_name: '上海胖布丁网络科技有限公司',
     price: '0',
     info_score: '4.5',
-    total_star_rating_count: 243,
-    download_count: 101118
+    total_star_rating_count: 243
   };
   const ctx = { url: 'https://x.test/apps/1', image: 'https://x.test/i.png' };
 
@@ -39,6 +38,11 @@ describe('应用结构化数据', () => {
     expect(ld.aggregateRating.ratingValue).toBe(4.5);
     expect(ld.aggregateRating.ratingCount).toBe(243);
     expect(ld.aggregateRating.bestRating).toBe(5);
+  });
+
+  it('旧应用记录中的下载量不对外输出', () => {
+    const ld = buildAppJsonLd({ ...info, download_count: 101118 }, ctx);
+    expect(ld).not.toHaveProperty('interactionStatistic');
   });
 
   it('缺少计数的评分不输出（避免无效的 AggregateRating）', () => {

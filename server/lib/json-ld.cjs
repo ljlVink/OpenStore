@@ -80,15 +80,6 @@ const buildAppJsonLd = (info, context = {}) => {
     };
   }
 
-  const downloads = positiveNumber(info.download_count);
-  if (downloads) {
-    data.interactionStatistic = {
-      '@type': 'InteractionCounter',
-      interactionType: 'https://schema.org/InstallAction',
-      userInteractionCount: downloads
-    };
-  }
-
   return data;
 };
 

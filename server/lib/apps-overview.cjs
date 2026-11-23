@@ -75,12 +75,6 @@ const APP_DEVICE_GROUPS = [
   { key: 'pc', label: '电脑', code: 15 }
 ];
 
-// 分类卡片上的数量 = 该分组下所有别名的数量之和（例如「休闲益智」= 休闲益智 + 休闲 + 益智解谜），
-// 所以点进分类时必须按同一组别名去查，否则列表数量对不上卡片上的数字。
-const APP_CATEGORY_ALIAS_LIST = Object.fromEntries(
-  APP_CATEGORY_GROUPS.map((group) => [group.label, group.aliases])
-);
-
 const runWithConcurrency = async (items, limit, worker) => {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -187,52 +181,6 @@ const fetchGroupCount = async (aliases, deviceCode) => {
   return extractApiTotal(response?.data);
 };
 
-/**
- * 分类计数的另一条来源：上游「大分类下载量增速排行」一次就返回全部 kind_name 的 app_count，
- * 按 APP_CATEGORY_GROUPS 归并回去就是各分组的数量。
- *
- * 实测（37 组）：35 组和逐个别名查出来的数字完全一致，另两组差 2 条（工具）和 5 条（拍摄美化）。
- * 换来的是「几十次上游查询 → 1 次（且上游自带 TTL 缓存）」。
- *
- * 唯一限制：它没有设备维度，所以带 deviceCode 的构建仍然走逐个别名的老路。
- */
-const fetchCategoryCountsFromRanking = async () => {
-  const response = await withUpstreamSlot(() =>
-    axios.get(`${HM_API_TARGET}/api/v0/rankings/category_download_growth`, {
-      params: { days: 7, limit: 300, min_apps: 1 },
-      headers: { 'User-Agent': UPSTREAM_USER_AGENT },
-      timeout: 20000
-    })
-  );
-
-  const list = Array.isArray(response?.data?.data) ? response.data.data : [];
-  if (!list.length) return null;
-
-  const countByKind = new Map();
-  for (const item of list) {
-    const name = String(item?.kind_name || '').trim();
-    if (!name) continue;
-    // 同名不同 kind_id 的合成一条
-    countByKind.set(name, (countByKind.get(name) || 0) + (Number(item.app_count) || 0));
-  }
-
-  const countByLabel = new Map();
-  let matchedAliases = 0;
-  for (const group of APP_CATEGORY_GROUPS) {
-    let sum = 0;
-    for (const alias of group.aliases) {
-      if (!countByKind.has(alias)) continue;
-      sum += countByKind.get(alias);
-      matchedAliases += 1;
-    }
-    if (sum > 0) countByLabel.set(group.label, sum);
-  }
-
-  // 一个别名都对不上，说明接口结构变了 —— 交回老路，别把分类页搞空
-  if (!matchedAliases || !countByLabel.size) return null;
-  return countByLabel;
-};
-
 const fetchDeviceCount = async (deviceCode) => {
   const response = await withUpstreamSlot(() =>
     axios.post(
@@ -255,54 +203,25 @@ const fetchDeviceCount = async (deviceCode) => {
 
 // 真正打上游的逻辑：一次构建 = 全部分类别名查询 + 设备查询
 const buildAppsOverview = async (deviceCode, cacheKey) => {
-  const hasDevice = deviceCode !== undefined && deviceCode !== null;
-  const startMessage = `[apps-overview] 开始构建 ${cacheKey}：${
-    hasDevice ? `${APP_CATEGORY_GROUPS.length} 个分组查询` : '1 次增速榜拉取'
-  } + ${APP_DEVICE_GROUPS.length} 个设备查询（并发 ${APP_OVERVIEW_CONCURRENCY}）`;
+  const startMessage = `[apps-overview] 开始构建 ${cacheKey}：${APP_CATEGORY_GROUPS.length} 个分组查询`
+    + ` + ${APP_DEVICE_GROUPS.length} 个设备查询（并发 ${APP_OVERVIEW_CONCURRENCY}）`;
   // 只走 pushLiveLog：它会同时写后台面板和终端，不再单独 console.log
   pushLiveLog('info', startMessage, { kind: 'cache' });
 
-  const categoryStartedAt = Date.now();
-  let countByLabel = null;
-
-  /*
-   * 不带设备维度时，先用「大分类下载量增速排行」一次拿全分类计数。
-   * 它比逐个别名打 /apps/query 轻得多（几十次 → 1 次），数字也几乎一致。
-   * 拿不到就回退老路，保证分类页不会因为上游抖动变空。
-   */
-  if (!hasDevice) {
-    try {
-      countByLabel = await fetchCategoryCountsFromRanking();
-      if (countByLabel) {
-        const ms = Date.now() - categoryStartedAt;
-        const message = `[apps-overview] 分类计数走增速榜：${countByLabel.size} 个分类 · ${ms}ms`;
-        pushLiveLog('info', message, { kind: 'cache', ms });
+  const categories = await runWithConcurrency(
+    APP_CATEGORY_GROUPS,
+    APP_OVERVIEW_CONCURRENCY,
+    async ({ label: name, aliases }) => {
+      let count = 0;
+      try {
+        count = await fetchGroupCount(aliases, deviceCode);
+      } catch (error) {
+        console.warn(`[apps-overview] Failed to count group ${name} for ${cacheKey}:`, error.message);
       }
-    } catch (error) {
-      console.warn('[apps-overview] 增速榜取分类计数失败，回退逐个别名查询：', error.message);
+      // 列表页沿用同一组别名，确保分类应用数与筛选结果一致。
+      return { name, count, aliases };
     }
-  }
-
-  if (!countByLabel) {
-    // 回退路径（带设备维度，或增速榜不可用）：按分组查，一组一次
-    const groupCounts = await runWithConcurrency(
-      APP_CATEGORY_GROUPS,
-      APP_OVERVIEW_CONCURRENCY,
-      async (group) => {
-        try {
-          return { label: group.label, count: await fetchGroupCount(group.aliases, deviceCode) };
-        } catch (error) {
-          console.warn(`[apps-overview] Failed to count group ${group.label} for ${cacheKey}:`, error.message);
-          return { label: group.label, count: 0 };
-        }
-      }
-    );
-
-    countByLabel = new Map();
-    groupCounts.forEach(({ label, count }) => {
-      countByLabel.set(label, (countByLabel.get(label) || 0) + count);
-    });
-  }
+  );
 
   const devices = await runWithConcurrency(APP_DEVICE_GROUPS, APP_OVERVIEW_CONCURRENCY, async (device) => {
     try {
@@ -315,13 +234,7 @@ const buildAppsOverview = async (deviceCode, cacheKey) => {
   });
 
   return {
-    categories: [...countByLabel.entries()]
-      .map(([name, count]) => ({
-        name,
-        count,
-        // 前端点进去查列表时要用同一组别名，数量才和卡片一致
-        aliases: APP_CATEGORY_ALIAS_LIST[name] || [name]
-      }))
+    categories: categories
       .filter((item) => item.count > 0)
       .sort((a, b) => b.count - a.count),
     devices

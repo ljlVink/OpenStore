@@ -124,6 +124,7 @@ interface Probe {
   name: string;
   /** 实际探测的同源接口或静态页面路径 */
   probePath: string;
+  timeoutMs?: number;
   online: boolean;
   latency: number;
   lastCheck: string;
@@ -164,6 +165,8 @@ const pages = ref<PageProbe[]>([
     name: '应用',
     route: '/apps',
     probePath: '/api/public/apps/overview',
+    // 无缓存时分类与设备计数逐组查询，默认节流下不能在 10 秒内完成。
+    timeoutMs: 20_000,
   }),
   createProbe<PageProbe>({
     key: 'about',
@@ -207,7 +210,7 @@ const checkProbe = async (probe: Probe) => {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), probe.timeoutMs ?? PROBE_TIMEOUT_MS);
 
     const response = await fetch(probe.probePath, {
       method: 'GET',

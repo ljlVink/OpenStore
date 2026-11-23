@@ -23,7 +23,6 @@ export interface AppGalleryAppInfo {
   version: string;
   version_code: number;
   size_bytes: number;
-  download_count: number;
   price: string;
   /** 当前版本发布时间（毫秒） */
   release_date: number;
@@ -252,8 +251,6 @@ export interface AppGalleryListApp {
   brief_desc: string;
   kind_name: string;
   version: string;
-  /** 华为给的约数文案，如「9,253 万次安装」 */
-  download_count_desc: string;
   size_bytes: number;
 }
 

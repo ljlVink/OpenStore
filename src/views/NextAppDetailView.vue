@@ -22,15 +22,11 @@
             <span class="hero-pkg">{{ appDetail.pkg_name || '—' }}</span>
           </p>
 
-          <!-- 关键指标：评分 / 下载量 / 大小 / 版本 -->
+          <!-- 关键指标：评分 / 大小 / 版本 -->
           <div class="hero-stats">
             <div class="stat">
               <span class="stat-value">{{ appDetail.average_rating || '—' }}</span>
               <span class="stat-label">评分</span>
-            </div>
-            <div class="stat">
-              <span class="stat-value" :title="rawDownloadCount">{{ downloadText }}</span>
-              <span class="stat-label">下载量</span>
             </div>
             <div class="stat">
               <span class="stat-value">{{ formatSize(appDetail.size_bytes) }}</span>
@@ -417,18 +413,6 @@ const sdkPills = computed(() => {
   return parts;
 });
 
-/** 下载量原始值（用于 hover 提示） */
-const rawDownloadCount = computed(() => String(appDetail.value?.download_count ?? ''));
-
-/** 下载量按 亿 / 万 压缩显示：73033350 -> 7,303万 */
-const downloadText = computed(() => {
-  const num = appDetail.value?.download_count;
-  if (!num) return '—';
-  if (num > 100000000) return (num / 100000000).toFixed(1) + '亿';
-  if (num > 10000) return (num / 10000).toFixed(1) + '万';
-  return num.toLocaleString('zh-CN');
-});
-
 const formatSize = (bytes: number | string) => {
   if (!bytes) return '—';
   const num = typeof bytes === 'string' ? parseInt(bytes) : bytes;
@@ -608,7 +592,7 @@ onUnmounted(() => {
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
-/* 四个关键指标：分隔线用边框，窄屏自动折行 */
+/* 关键指标：窄屏自动折行 */
 .hero-stats {
   display: flex;
   flex-wrap: wrap;
@@ -1085,10 +1069,10 @@ onUnmounted(() => {
   }
 
   .hero-stats {
-    /* 手机上也要一行四个：等宽四列，值过长就省略（hover/长按有完整值） */
+    /* 手机等宽三列，值过长就省略 */
     grid-area: 3 / 1 / 4 / -1;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-top: 2px;
     gap: 8px;
   }
@@ -1162,9 +1146,9 @@ onUnmounted(() => {
   }
 }
 
-/* 极窄（≤340px）：四个指标仍在一行，数值允许折成两行，保证完整显示 */
+/* 极窄（≤340px）：数值允许折成两行，保证完整显示 */
 @media (max-width: 340px) {
-  /* 数值折成两行时，四个标签仍对齐在同一基线上 */
+  /* 数值折成两行时，标签仍对齐在同一基线上 */
   .hero-stats {
     align-items: end;
   }

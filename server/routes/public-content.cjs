@@ -11,7 +11,9 @@ const { loadBlockedAppPackages } = require('../lib/blocked-apps.cjs');
 const router = express.Router();
 
 router.get('/api/public/apps', (req, res) => {
-  db.all(`SELECT * FROM apps WHERE enabled=1 ORDER BY id DESC`, [], (err, rows) => {
+  db.all(`SELECT id, name, provider, bg_url, icon_url, download_url, enabled, kind_name,
+                 average_rating, original_id, created_at, updated_at
+          FROM apps WHERE enabled=1 ORDER BY id DESC`, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ items: rows });
   });

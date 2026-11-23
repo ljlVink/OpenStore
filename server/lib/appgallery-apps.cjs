@@ -1,6 +1,6 @@
 /*
  * 应用详情：直接读华为应用市场。
- *   - webedge/appinfo：应用信息 + 当前版本（大小、SDK、精确下载量、发布时间…）；
+ *   - webedge/appinfo：应用信息 + 当前版本（大小、SDK、发布时间…）；
  *   - 网页版详情页 webAgAppDetail|<appId>：评分分布（fl.card.comment 的 starInfo）和备案号；
  *   - 客户端 versionHistories|<appId>：版本历史，华为只给最近 25 个版本。
  * 字段名沿用前端已经在用的 snake_case（与原市场数据上游一致）。
@@ -55,7 +55,6 @@ function mapAppInfo(raw) {
     sha256: text(raw.sha256),
     info_score: num(raw.hot),
     info_rate_count: num(raw.rateNum),
-    download_count: num(raw.downCount),
     price: text(raw.price) || '0',
     release_date: num(raw.releaseDate),
     new_features: text(raw.newFeatures),

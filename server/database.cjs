@@ -176,7 +176,6 @@ db.serialize(() => {
     enabled INTEGER DEFAULT 1,
     kind_name TEXT,
     average_rating TEXT,
-    download_count_str TEXT,
     original_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -376,7 +375,6 @@ db.serialize(() => {
   ensureColumn('apps', 'icon_url', 'TEXT');
   ensureColumn('apps', 'kind_name', 'TEXT');
   ensureColumn('apps', 'average_rating', 'TEXT');
-  ensureColumn('apps', 'download_count_str', 'TEXT');
   ensureColumn('apps', 'original_id', 'TEXT');
   // 事故 / 维护 / 提示 卡片的图标（存图标名，前台按名字取 SVG；留空则按类型取默认图标）
   ensureColumn('incidents', 'icon', 'TEXT');
