@@ -1,0 +1,5 @@
+{
+  // 部署：在本目录执行 npx esa-cli deploy（详见 README「上游中继」）
+  "name": "openstore-relay",
+  "entry": "./index.js"
+}

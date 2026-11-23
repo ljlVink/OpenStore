@@ -4,8 +4,9 @@
  *   - 鸿蒙客户端接口：不鉴权，只需要一份像样的设备信息。
  * 都是未公开的消费端接口，调用方负责缓存。
  */
-const { randomBytes } = require('node:crypto');
+const { createHash, createHmac, randomBytes } = require('node:crypto');
 const axios = require('axios');
+const { bindings } = require('./runtime.cjs');
 
 const web = axios.create({
   baseURL: 'https://web-drcn.hispace.dbankcloud.com/edge',
@@ -18,6 +19,39 @@ const web = axios.create({
   maxRedirects: 0,
   maxContentLength: 2 * 1024 * 1024
 });
+
+/*
+ * 华为云 WAF 会拦 Cloudflare Worker 的出口（501），配置了 APPGALLERY_RELAY_URL 时网页版接口改走阿里云 ESA 中继。
+ * 签名格式与 relay/esa/index.js 保持一致：
+ *   canonical = "openstore-relay-v1\n<ts>\n<METHOD>\n<host><path><?query>\n<hex(SHA-256(body))>"
+ */
+function routeThroughRelay(config, env, now = Date.now()) {
+  const relay = text(env?.APPGALLERY_RELAY_URL);
+  if (!relay) return config;
+  const secret = text(env.APPGALLERY_RELAY_SECRET);
+  if (!secret) throw new Error('APPGALLERY_RELAY_SECRET is required when APPGALLERY_RELAY_URL is set');
+
+  const target = new URL(axios.getUri(config));
+  const method = String(config.method || 'get').toUpperCase();
+  const body = config.data === undefined ? '' : typeof config.data === 'string' ? config.data : JSON.stringify(config.data);
+  const timestamp = String(Math.floor(now / 1000));
+  const upstream = `${target.host}${target.pathname}${target.search}`;
+  const canonical = ['openstore-relay-v1', timestamp, method, upstream, createHash('sha256').update(body).digest('hex')].join('\n');
+
+  config.url = `${new URL(relay).origin}/${upstream}`;
+  config.baseURL = undefined;
+  config.params = undefined;
+  if (body) {
+    // 签的是这份字符串；JSON Content-Type 下 axios 会原样发送
+    config.data = body;
+    config.headers.set('Content-Type', 'application/json');
+  }
+  config.headers.set('X-Relay-Timestamp', timestamp);
+  config.headers.set('X-Relay-Signature', createHmac('sha256', secret).update(canonical).digest('hex'));
+  return config;
+}
+
+web.interceptors.request.use((config) => routeThroughRelay(config, bindings()));
 
 const store = axios.create({
   baseURL: 'https://store-drcn.hispace.dbankcloud.com/hwmarket/harmony',
@@ -79,4 +113,4 @@ async function callClient(method, params, { device = 'phone', signal } = {}) {
   return expectOk(data, method);
 }
 
-module.exports = { openWebSession, callClient, expectOk, text, array, cardKind };
+module.exports = { openWebSession, callClient, expectOk, text, array, cardKind, routeThroughRelay };
