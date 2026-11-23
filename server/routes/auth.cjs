@@ -1,5 +1,5 @@
 /*
- * 登录 / 刷新 token / 改密码 / 后台概览
+ * 登录 / 刷新 token / 改密码
  */
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -7,7 +7,6 @@ const bcrypt = require('bcryptjs');
 const db = require('../database.cjs');
 const { JWT_SECRET, requireAuth, logAction, loginKeyOf, loginLockRemainingMs, recordLoginFailure, clearLoginFailures, LOGIN_DUMMY_HASH } = require('../middleware/auth.cjs');
 const { writeEnvKey } = require('../lib/env-file.cjs');
-const { cachedVisitorsGet } = require('../lib/visitors-stats.cjs');
 
 const router = express.Router();
 
@@ -99,45 +98,6 @@ router.post('/api/admin/auth/change-password', requireAuth, (req, res) => {
       logAction(req.user?.username, 'password_change', 'users', uid);
       res.json({ ok: true });
     });
-  });
-});
-
-// Admin Overview Dashboard Stats
-router.get('/api/admin/overview', requireAuth, (req, res) => {
-  const stats = {
-    visitorCount: 0,
-    uniqueIpCount: 0,
-    locationKinds: 0,
-    appCount: 0,
-    systemUptime: process.uptime(),
-    // 浏览器端拿不到 process.versions，Node 版本只能由后端提供
-    nodeVersion: process.version
-  };
-
-  const queries = [
-    new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM visitors`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0)))),
-    new Promise((resolve) => db.get(`SELECT COUNT(*) as count FROM apps`, [], (err, row) => resolve(err ? 0 : (row ? row.count : 0))))
-  ];
-
-  Promise.all(queries).then(results => {
-    stats.visitorCount = results[0];
-    stats.appCount = results[1];
-
-    // 独立 IP 复用访客页那套聚合缓存（后台每分钟预热），不用再扫一次 18 万行
-    cachedVisitorsGet(
-      'agg::[]',
-      `SELECT COUNT(*) AS total, COUNT(DISTINCT ip) AS unique_ip,
-              COUNT(DISTINCT location) AS location_kinds, COUNT(DISTINCT device) AS device_kinds
-         FROM visitors`,
-      [],
-      (err, agg) => {
-        stats.uniqueIpCount = err || !agg ? 0 : (agg.unique_ip || 0);
-        stats.locationKinds = err || !agg ? 0 : (agg.location_kinds || 0);
-        res.json(stats);
-      }
-    );
-  }).catch(err => {
-    res.status(500).json({ error: err.message });
   });
 });
 

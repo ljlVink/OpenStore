@@ -76,7 +76,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['unblock']);
 
-/** 库里存的是 UTC，按和访客日志一致的口径转东八区 */
+/** 库里存的是 UTC，转东八区 */
 const formatTime = (val: string) => {
   const date = toDate(val);
   if (!date) return val || '';

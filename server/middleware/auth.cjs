@@ -34,7 +34,7 @@ const LOGIN_FAILURE_MAP_MAX = Math.max(Number(process.env.LOGIN_FAILURE_MAP_MAX)
 const loginFailureMap = new Map(); // key -> { count, firstAt, lockedUntil }
 
 const loginKeyOf = (req, username) =>
-  // 与访客统计用同一套取 IP 逻辑，避免两处口径不一致
+  // 与脚本护栏用同一套取 IP 逻辑，避免两处口径不一致
   `${getClientIp(req)}|${String(username || '').toLowerCase()}`;
 
 const loginLockRemainingMs = (key) => {

@@ -29,34 +29,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-export interface Monitor {
-  id: number;
-  friendly_name: string;
-  url: string;
-  type: number;
-  status: number; // 2: Up, 8: Seems Down, 9: Down, 0: Paused
-  uptime_ratio: string;
-  custom_uptime_ratio: string; // "100.00-99.98-99.50"
-  custom_uptime_ranges?: string; // "100.00-100.00-..." (30 daily ranges)
-  create_datetime: number; // Added for running time calculation
-  response_times?: Array<{ datetime: number; value: number }>;
-  logs?: Array<{ type: number; datetime: number; duration: number; reason: any }>;
-  ssl?: {
-    brand: string;
-    product: string;
-    expires: number;
-  };
-}
-
-export interface Visitor {
-  id: number;
-  ip: string;
-  location: string;
-  device: string;
-  path?: string;
-  timestamp: string;
-}
-
 export interface Incident {
   id: number;
   title: string;
@@ -81,126 +53,13 @@ export const getActiveIncidents = async (): Promise<Incident[]> => {
   }
 };
 
-export const getMonitors = async (): Promise<Monitor[]> => {
-  try {
-    const response = await apiClient.get('/monitors');
-    if (response.data.stat === 'ok') {
-      return response.data.monitors;
-    } else {
-      throw new Error(response.data.error?.message || 'API Error');
-    }
-  } catch (error) {
-    try {
-      const status = (error as any)?.response?.status;
-      const method = (error as any)?.config?.method?.toUpperCase();
-      const baseURL = (error as any)?.config?.baseURL || '';
-      const url = (error as any)?.config?.url || '';
-      console.error(`[AxiosError] ${method || 'GET'} ${baseURL}${url} ${status || ''}`, (error as any)?.message || error);
-    } catch {}
-    throw error;
-  }
-};
-
-export const trackVisit = async (path: string) => {
+/** 上报当前前台路径，只供 SEO 收录队列使用（服务端不记录 IP / UA / 归属地） */
+export const reportPagePath = async (path: string) => {
   try {
     await apiClient.get('/public/track', { params: { path } });
   } catch (e) {
   }
 };
-
-export const getVisitors = async (): Promise<Visitor[]> => {
-  try {
-    const response = await apiClient.get('/visitors');
-    return response.data.visitors;
-  } catch (error) {
-    console.error('Failed to fetch visitors', error);
-    return [];
-  }
-};
-
-export interface VisitorStats {
-  visitors: Visitor[];
-  total: number;
-  uniqueIp?: number;
-  locationKinds?: number;
-  deviceKinds?: number;
-  locationStats?: Array<{ name: string; count: number }>;
-  deviceStats?: Array<{ name: string; count: number }>;
-}
-
-export const getVisitorStats = async (page?: number, pageSize?: number, filters?: { location?: string; device?: string; path?: string }): Promise<VisitorStats> => {
-  try {
-    const params: any = {};
-    if (page) params.page = page;
-    if (pageSize) params.pageSize = pageSize;
-    if (filters?.location) params.location = filters.location;
-    if (filters?.device) params.device = filters.device;
-    if (filters?.path) params.path = filters.path;
-
-    const response = await apiClient.get('/visitors', { params });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch visitor stats', error);
-    return { visitors: [], total: 0 };
-  }
-};
-
-export const batchDeleteVisitors = async (ids: number[]): Promise<void> => {
-  await apiClient.post('/visitors/batch-delete', { ids });
-};
-
-export const getVisitorTrend = async (days: number = 30): Promise<Array<{ date: string; count: number; unique_ip: number }>> => {
-  const response = await apiClient.get('/visitors/trend', { params: { days } });
-  return response.data;
-};
-
-export const exportVisitors = async (): Promise<void> => {
-  const response = await apiClient.get('/visitors/export', { responseType: 'blob' });
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `visitors-${Date.now()}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-};
-
-// Announcements
-export interface Announcement {
-  id: number;
-  title: string;
-  content_html?: string;
-  content_markdown?: string;
-  status: 'draft' | 'published' | 'offline';
-  scheduled_at?: string;
-  published_at?: string;
-  updated_at?: string;
-}
-export const getAnnouncements = async (): Promise<Announcement[]> => {
-  const response = await apiClient.get('/announcements');
-  return response.data.items || [];
-};
-export const getPublicAnnouncements = async (): Promise<Announcement[]> => {
-  const response = await apiClient.get('/public/announcements');
-  return response.data.items || [];
-};
-export const createAnnouncement = async (data: Partial<Announcement>): Promise<{ id: number }> => {
-  const response = await apiClient.post('/announcements', data);
-  return response.data;
-};
-export const updateAnnouncement = async (id: number, data: Partial<Announcement>): Promise<void> => {
-  await apiClient.put(`/announcements/${id}`, data);
-};
-export const deleteAnnouncement = async (id: number): Promise<void> => {
-  await apiClient.delete(`/announcements/${id}`);
-};
-export const publishAnnouncement = async (id: number): Promise<void> => {
-  await apiClient.post(`/announcements/${id}/publish`);
-};
-export const offlineAnnouncement = async (id: number): Promise<void> => {
-  await apiClient.post(`/announcements/${id}/offline`);
-};
-
 
 // Apps
 export interface AppItem {
@@ -217,45 +76,6 @@ export const getPublicApps = async (): Promise<AppItem[]> => {
   return response.data.items || [];
 };
 
-// Site Cards
-export interface SiteCard {
-  id: number;
-  title: string;
-  enabled: number;
-  sort_order: number;
-  style?: any;
-}
-export const getSiteCards = async (): Promise<SiteCard[]> => {
-  const response = await apiClient.get('/site-cards');
-  return response.data.items || [];
-};
-export const getPublicSiteCards = async (): Promise<SiteCard[]> => {
-  const response = await apiClient.get('/public/site-cards');
-  return response.data.items || [];
-};
-export const updateSiteCard = async (id: number, data: Partial<SiteCard>): Promise<void> => {
-  await apiClient.put(`/site-cards/${id}`, data);
-};
-
-// Env Vars
-export interface EnvVar {
-  key: string;
-  value?: string;
-  secure?: boolean;
-  category?: string;
-  updated_at?: string;
-}
-export const getEnvVars = async (): Promise<Record<string, EnvVar[]>> => {
-  const response = await apiClient.get('/env');
-  return response.data;
-};
-export const setEnvVar = async (data: { key: string; value: string; secure?: boolean; category?: string }): Promise<void> => {
-  await apiClient.put('/env', data);
-};
-export const getEnvHistory = async (key?: string): Promise<any[]> => {
-  const response = await apiClient.get('/env/history', { params: { key } });
-  return response.data.items;
-};
 // Incidents Admin
 export const getIncidents = async (): Promise<Incident[]> => {
   const response = await apiClient.get('/incidents');
@@ -340,16 +160,6 @@ export const getExplore = async (): Promise<ExploreSection[]> => {
 export const getTopicDetail = async (substanceId: string): Promise<FullSubstanceInfo> => {
   const { data } = await apiClient.get<FullSubstanceInfo>(`/public/topics/${encodeURIComponent(substanceId)}`);
   return data;
-};
-
-export const getThemeSettings = async (): Promise<Record<string, string>> => {
-  try {
-    const response = await apiClient.get('/settings/theme');
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch theme settings', error);
-    return {};
-  }
 };
 
 export default apiClient;

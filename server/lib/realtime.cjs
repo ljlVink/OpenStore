@@ -1,7 +1,7 @@
 /*
  * WebSocket 实时通道。
  *
- * 这条通道推送的访客和日志事件等属于后台数据，
+ * 这条通道推送的内容刷新等事件属于后台数据，
  * 因此升级握手时必须校验管理员 JWT，未登录访客不建立连接。
  *
  * 用 attachWebSocket(server, { jwtSecret }) 挂到 http.Server 上；
@@ -39,7 +39,7 @@ function broadcast(type, payload) {
   });
 }
 
-// 浏览器端 WebSocket 无法自定义请求头，所以额外接受 ?token=（与 /api/admin/live 的 SSE 用法一致）
+// 浏览器端 WebSocket 无法自定义请求头，所以额外接受 ?token=
 function tokenFromUpgradeRequest(request) {
   const auth = request.headers.authorization || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7);

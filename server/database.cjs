@@ -2,7 +2,6 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 // IndexNow key 需要在建表阶段就随机生成一次，这里要用到 crypto
 const crypto = require('crypto');
-const defaultSiteCards = require('./lib/site-card-defaults.cjs');
 
 const dbPath = path.resolve(__dirname, 'visitors.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -15,99 +14,35 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 /*
  * SQLite 默认一撞上写锁就立刻抛 SQLITE_BUSY。
- * 后台维护（VACUUM、切日志模式）和前台写访客日志撞在一起时就会报 "database is locked"，
+ * 后台维护（VACUUM、切日志模式）和前台写入撞在一起时就会报 "database is locked"，
  * 这里给 5 秒等待窗口：让它排队等锁，而不是直接失败。
  */
 db.configure('busyTimeout', 5000);
 
 db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS visitors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip TEXT,
-    location TEXT,
-    device TEXT,
-    path TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // 访客表数据量大（十万级以上）时，趋势与列表查询都要按时间过滤/排序，
-  // 没有索引会退化成全表扫描
-  db.run('CREATE INDEX IF NOT EXISTS idx_visitors_timestamp ON visitors(timestamp)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_visitors_location ON visitors(location)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_visitors_device ON visitors(device)');
   /*
-   * 访客量大之后另外两个高频查询也走索引：
-   *   ip + timestamp   —— 后台点某个 IP 看「最近访问」（按 ip 过滤 + 按时间排序）
-   *   timestamp + ip   —— 趋势里统计「独立 IP」这类按时间窗口的去重计数（覆盖索引，不回表）
+   * 已下线功能的表：访客记录（不再记录 IP / UA / 归属地）、异常应用屏蔽名单。
+   * 老库里有的话一次性删掉（索引随表删除），再 VACUUM 把数据页真正抹掉、收回磁盘。
+   * 都不存在时什么都不做，正常启动不会多跑 VACUUM。
+   *
+   * 不能在查询回调里直接 DROP：那时查询语句还没 finalize，会报 SQLITE_LOCKED，
+   * 所以推到 setImmediate 之后再执行。
    */
-  db.all("PRAGMA index_list(visitors)", [], (err, indexRows) => {
-    if (err || !Array.isArray(indexRows)) return;
-    const names = new Set(indexRows.map((row) => row.name));
-    const needIpIndex = !names.has('idx_visitors_ip_time');
-    const needTimeIpIndex = !names.has('idx_visitors_time_ip');
-
-    if (needIpIndex) db.run('CREATE INDEX IF NOT EXISTS idx_visitors_ip_time ON visitors(ip, timestamp)');
-    if (needTimeIpIndex) db.run('CREATE INDEX IF NOT EXISTS idx_visitors_time_ip ON visitors(timestamp, ip)');
-
-    // 新建索引后刷新一次统计信息，让查询计划立刻用上新索引
-    if (needIpIndex || needTimeIpIndex) {
-      db.run('ANALYZE visitors', (analyzeErr) => {
-        if (analyzeErr) console.error('ANALYZE visitors failed:', analyzeErr.message);
+  const RETIRED_TABLES = ['visitors', 'blocked_apps'];
+  db.all(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${RETIRED_TABLES.map(() => '?').join(', ')})`,
+    RETIRED_TABLES,
+    (err, rows) => {
+      if (err || !rows || !rows.length) return;
+      const names = rows.map((row) => row.name);
+      setImmediate(() => {
+        db.exec(`${names.map((name) => `DROP TABLE IF EXISTS ${name};`).join(' ')} VACUUM;`, (execErr) => {
+          if (execErr) console.error('[database] 删除已下线的表失败：', execErr.message);
+          else console.log(`[database] 已删除已下线的表 ${names.join(', ')} 并完成 VACUUM`);
+        });
       });
     }
-  });
-
-  // Migration: Add path column if not exists
-  db.all("PRAGMA table_info(visitors)", [], (err, rows) => {
-    if (err) {
-      console.error('Error getting table info:', err);
-      return;
-    }
-    const hasPath = rows && Array.isArray(rows) && rows.some(row => row.name === 'path');
-    if (!hasPath) {
-      console.log('Adding path column to visitors table...');
-      db.run("ALTER TABLE visitors ADD COLUMN path TEXT", (err2) => {
-        if (err2) console.error('Error adding path column to visitors table:', err2);
-        else console.log('Successfully added path column to visitors table.');
-      });
-    }
-  });
-
-  db.run(`CREATE TABLE IF NOT EXISTS announcement_categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    parent_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS announcements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content_html TEXT,
-    content_markdown TEXT,
-    status TEXT CHECK(status IN ('draft','published','offline')) DEFAULT 'draft',
-    category_id INTEGER,
-    scheduled_at DATETIME,
-    published_at DATETIME,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS env_vars (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    key TEXT NOT NULL UNIQUE,
-    value_encrypted TEXT NOT NULL,
-    category TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS env_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    key TEXT NOT NULL,
-    old_value_encrypted TEXT,
-    new_value_encrypted TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  );
 
   db.run(`CREATE TABLE IF NOT EXISTS system_settings (
     key TEXT PRIMARY KEY,
@@ -181,70 +116,11 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // 异常应用：屏蔽掉上游拉回来的脏数据，首页列表里不再展示（搜索仍然能搜到）
-  db.run(`CREATE TABLE IF NOT EXISTS blocked_apps (
-    package TEXT PRIMARY KEY,
-    name TEXT,
-    icon_url TEXT,
-    note TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS site_cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    page TEXT NOT NULL DEFAULT 'home',
-    key TEXT NOT NULL,
-    title TEXT,
-    enabled INTEGER DEFAULT 1,
-    sort_order INTEGER DEFAULT 0,
-    style TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(page, key)
-  )`);
-
-  const seedSiteCards = () => {
-    db.run(`DELETE FROM site_cards WHERE page = 'home' AND key IN ('system-status', 'overview', 'chart-distribution', 'rank-overview', 'topic-spotlight', 'app-list')`);
-    db.run(`DELETE FROM site_cards WHERE page = 'about' OR (page = 'system' AND key IN ('music', 'friend_links', 'group_chats'))`);
-    defaultSiteCards.forEach(card => {
-      db.run(
-        `INSERT OR IGNORE INTO site_cards (page, key, title, sort_order, style) VALUES (?, ?, ?, ?, ?)`,
-        [card.page, card.key, card.title, card.sort_order, card.style ? JSON.stringify(card.style) : null]
-      );
-    });
-  };
-
-  // 老库的 site_cards 没有 page 列：重建表，已有卡片归到首页「系统」页签，再补齐其它页面的默认卡片
-  db.all(`PRAGMA table_info(site_cards)`, [], (err, columns) => {
-    const hasPageColumn = !err && Array.isArray(columns) && columns.some(column => column.name === 'page');
-    if (hasPageColumn) {
-      seedSiteCards();
-      return;
-    }
-
-    db.serialize(() => {
-      db.run(`CREATE TABLE site_cards_page_migration (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        page TEXT NOT NULL DEFAULT 'home',
-        key TEXT NOT NULL,
-        title TEXT,
-        enabled INTEGER DEFAULT 1,
-        sort_order INTEGER DEFAULT 0,
-        style TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(page, key)
-      )`);
-      db.run(`INSERT OR IGNORE INTO site_cards_page_migration (id, page, key, title, enabled, sort_order, style, updated_at)
-              SELECT id, 'system', key, title, enabled, sort_order, style, updated_at FROM site_cards`);
-      db.run(`DROP TABLE site_cards`);
-      db.run(`ALTER TABLE site_cards_page_migration RENAME TO site_cards`, () => seedSiteCards());
-    });
-  });
-
   /*
    * ---- SEO 收录提交 ----
    *
    * seo_url_queue：待提交 URL 队列。
-   * 访客入库成功后写入原始路径，由 lib/seo-submit.cjs 聚合并提交。
+   * 前台路由切换时由 /api/public/track 写入原始路径，由 lib/seo-submit.cjs 聚合并提交。
    * 队列只负责「攒」，过滤、归一、限额都在提交阶段处理。
    *
    * path 为原始路径（可能带 query），不去归一化：详情页被拍平成列表页会导致提交无效。
@@ -352,26 +228,6 @@ db.serialize(() => {
       }
     });
   }
-  ensureColumn('announcements', 'content_markdown', 'TEXT');
-  // 访客来源标记：1 = 经已知前置反代（如 beta-next.icu）进来的，0 = 直接访问本站。
-  // 老数据没有这个信息，默认 0；判定逻辑在 server/index.cjs 的 isViaTrustedFrontProxy()。
-  ensureColumn('visitors', 'via_proxy', 'INTEGER DEFAULT 0');
-  /*
-   * 访客原始 User-Agent。
-   * device 是从它解析出来的展示名（丢掉了版本细节），原文留一份便于排查
-   * 「某个访客用的到底是什么客户端/版本」这类问题。
-   * 注意：转发上游时用的不是它，而是 lib/config.cjs 里统一的 UPSTREAM_USER_AGENT。
-   * 老数据没有这一列，值为 NULL（前端据此区分「没记录」和「确实没带 UA」）。
-   */
-  ensureColumn('visitors', 'ua', 'TEXT');
-  /*
-   * 这次请求是不是经 /api/v0 转发到应用市场上游的。
-   * 转发时用的 UA 是统一的 UPSTREAM_USER_AGENT，和访客自己的 ua 是两回事，
-   * 后台要靠这一列决定「这一行该显示哪个 UA」。
-   */
-  ensureColumn('visitors', 'via_upstream', 'INTEGER DEFAULT 0');
-  ensureColumn('announcements', 'published_at', 'DATETIME');
-  ensureColumn('announcements', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
   ensureColumn('apps', 'icon_url', 'TEXT');
   ensureColumn('apps', 'kind_name', 'TEXT');
   ensureColumn('apps', 'average_rating', 'TEXT');

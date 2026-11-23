@@ -11,7 +11,7 @@ const AppsView = () => import('../views/AppsView.vue');
 const AdminDashboardView = () => import('../views/admin/AdminDashboardView.vue');
 const AboutView = () => import('../views/AboutView.vue');
 import { useAuthStore } from '../stores/auth';
-import { trackVisit } from '../services/api';
+import { reportPagePath } from '../services/api';
 import { applyPageMeta } from '../utils/page-share';
 
 const router = createRouter({
@@ -99,13 +99,7 @@ const router = createRouter({
       path: '/admin/dashboard',
       name: 'admin-dashboard',
       component: AdminDashboardView,
-      meta: { title: '后台管理', requiresAuth: true, description: 'CloseStore 后台管理系统，管理公告、评论和站点设置。' }
-    },
-    {
-      path: '/admin/settings',
-      name: 'admin-settings',
-      component: () => import('../views/admin/SystemSettingsView.vue'),
-      meta: { title: '主题设置', requiresAuth: true, description: '管理全站主题配色' }
+      meta: { title: '后台管理', requiresAuth: true, description: 'CloseStore 后台管理系统，管理故障维护和站点设置。' }
     },
     {
       path: '/admin/seo',
@@ -158,9 +152,9 @@ router.afterEach((to) => {
     meta: to.meta as Record<string, any>,
   });
   
-  // Track visitor (exclude admin paths)
+  // 前台路径进 SEO 收录队列（后台路径不报）
   if (!to.path.startsWith('/admin')) {
-    trackVisit(to.fullPath);
+    reportPagePath(to.fullPath);
   }
 });
 

@@ -1,8 +1,8 @@
 /*
- * SEO 收录提交：把访客真实访问过的前台路径提交给搜索引擎。
+ * SEO 收录提交：把前台真实访问过的路径提交给搜索引擎。
  *
  * 数据流：
- *   index.cjs（访客入库后）→ enqueuePath()
+ *   index.cjs（/api/public/track，前台路由切换时上报）→ enqueuePath()
  *     → seo_url_queue（按归一化 URL 聚合 hits / first_seen / last_seen）
  *       → runSubmission()：取数 → 归一化过滤 → 按额度分批提交
  *         → 必应 Webmaster API（主）/ IndexNow（备）
@@ -207,7 +207,7 @@ const isExcludedPath = (pathname) => {
  * 处理内容：丢弃无业务意义的查询参数（见 JUNK_PARAM_*）、参数按字典序排序、
  * 去掉结尾多余斜杠、拒绝站外地址与非前台路径。
  *
- * @param {string} rawPath 访客原始路径，可为 "/x/y" 或同源绝对地址
+ * @param {string} rawPath 原始路径，可为 "/x/y" 或同源绝对地址
  * @param {string} siteUrl 站点 origin
  * @returns {string} 规范 URL；不可提交时返回空串
  */
@@ -261,9 +261,9 @@ function normalizeUrl(rawPath, siteUrl) {
 
 /**
  * 将访问路径写入提交队列。同一条归一化 URL 累加 hits 并刷新 last_seen。
- * 在访客统计中间件中调用，失败时不抛异常、不影响请求流程。
+ * 由 /api/public/track 调用，失败时不抛异常、不影响请求流程。
  *
- * @param {string} rawPath 访客原始路径
+ * @param {string} rawPath 原始路径
  * @param {string} [siteUrl] 站点 origin，省略则取 SITE_ORIGIN
  */
 function enqueuePath(rawPath, siteUrl) {

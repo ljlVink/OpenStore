@@ -8,7 +8,7 @@
  *
  * 注意：真正的取 IP 逻辑在 lib/client-ip.cjs，它会优先读 CDN 给出的客户端 IP 头；
  * 这里只影响 req.ip，用来做诊断。之前把默认值设成 loopback（=只信任一层），
- * 结果取到的是 EdgeOne 边缘节点的 IP，访客日志里的 IP 全错 —— 别再改回去。
+ * 结果取到的是 EdgeOne 边缘节点的 IP，客户端 IP 全错 —— 别再改回去。
  *
  * app.set('trust proxy', ...) 由 index.cjs 负责调用（app 实例在那边创建）。
  */

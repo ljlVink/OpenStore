@@ -92,7 +92,7 @@
         type="textarea"
         :rows="4"
         spellcheck="false"
-        placeholder="SELECT * FROM visitors ORDER BY id DESC LIMIT 20"
+        placeholder="SELECT * FROM operation_logs ORDER BY id DESC LIMIT 20"
       />
       <div class="toolbar mt-2">
         <el-button type="primary" :loading="runningSql" @click="runQuery">执行</el-button>
@@ -497,7 +497,7 @@ const onSortChange = ({ prop, order }: { prop: string; order: string | null }) =
 
 /* -------------------------------- SQL 查询 -------------------------------- */
 
-const sql = ref('SELECT * FROM visitors ORDER BY id DESC LIMIT 20');
+const sql = ref('SELECT * FROM operation_logs ORDER BY id DESC LIMIT 20');
 const runningSql = ref(false);
 const queryRows = ref<Array<Record<string, unknown>>>([]);
 const queryColumns = ref<string[]>([]);

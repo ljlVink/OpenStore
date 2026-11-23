@@ -642,7 +642,7 @@ const removeBan = async (ip: string) => {
   }
 };
 
-/** 库里存的是 UTC，按和访客日志一致的口径转成东八区显示 */
+/** 库里存的是 UTC，转成东八区显示 */
 const formatTime = (val: string) => {
   if (!val) return '';
   const date = new Date(val.endsWith('Z') ? val : val.replace(' ', 'T') + 'Z');
