@@ -35,9 +35,6 @@ const MAX_BLOCK_MS = 24 * 60 * 60 * 1000;
 // 警告页默认的申诉/合作入口（后台改过之后以数据库里的为准）
 const CONTACT_URL = String(process.env.SCRIPT_GUARD_CONTACT || '').trim() || `${SITE_ORIGIN}/about`;
 
-// 后端自己发起的请求：重放（/api/admin/replay）与接口体检（/api/admin/perf-check）
-const INTERNAL_HEADERS = ['x-openstore-replay', 'x-openstore-perfcheck'];
-
 /* --------------------------- 放行名单 --------------------------- */
 
 /* 放行名单：命中的客户端不计次、不封禁（硬封禁只看 IP，不受影响）。
@@ -96,8 +93,6 @@ const saveAllowList = (input, cb) => {
 // ip -> { hits: number[], strikes: number, blockedUntil: number, ua: string }
 const state = new Map();
 const stats = { scriptRequests: 0, warned: 0, blocked: 0, strikes: 0 };
-
-const isInternal = (req) => INTERNAL_HEADERS.some((h) => req.headers[h] === '1');
 
 /** UA 解析不出浏览器名就认为是脚本；放行名单里的客户端不参与判定 */
 const looksLikeScript = (ua) => {
@@ -618,7 +613,6 @@ const scriptGuard = (req, res, next) => {
   if (SEO_EXEMPT_PATHS.has(req.path || '')) return next();
   if (OFFICIAL_CRAWLER_UA_RE.test(String(req.headers['user-agent'] || ''))) return next();
   if (!looksLikeScript(req.headers['user-agent'])) return next();
-  if (isInternal(req)) return next();
 
   const ip = getClientIp(req);
 

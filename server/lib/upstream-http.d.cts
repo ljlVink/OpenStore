@@ -21,7 +21,6 @@ export declare const proxyGate: {
   acquire: (waitMs?: number) => Promise<(() => void) | null>;
   stats: () => { limit: number; active: number; waiting: number };
 };
-export declare function streamGuardStats(): { active: number };
 export declare function attachStreamGuards(
   response: unknown,
   res: unknown,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { createGate, attachStreamGuards, streamGuardStats } from '../../server/lib/upstream-http.cjs';
+import { createGate, attachStreamGuards } from '../../server/lib/upstream-http.cjs';
 
 /** 够用的 Express 响应替身：会被 guard 挂 close 监听、也可能被 destroy */
 const makeRes = () => {
@@ -158,18 +158,6 @@ describe('流式传输护栏', () => {
     res.emit('close');
     expect(stream.destroyed).toBe(true);
     expect(reasons[0]).toMatch(/客户端提前断开/);
-  });
-
-  it('dispose 幂等，在线条数不会算漏', () => {
-    const stream = makeStream();
-    const before = streamGuardStats().active;
-
-    const guard = attachStreamGuards({ data: stream, request: null }, null, { idleMs: 0, maxMs: 0 });
-    expect(streamGuardStats().active).toBe(before + 1);
-
-    guard.dispose();
-    guard.dispose();
-    expect(streamGuardStats().active).toBe(before);
   });
 
   it('挂监听前客户端就已经断开（排队期间跑掉）也要掐断上游', () => {

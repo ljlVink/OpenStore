@@ -130,9 +130,6 @@ const createGate = (max) => {
 /** /api/v0 等所有反向代理共享的闸门 */
 const proxyGate = createGate(PROXY_MAX_CONCURRENCY);
 
-let activeStreams = 0;
-const streamGuardStats = () => ({ active: activeStreams });
-
 /** 时长文案：不足 1 秒显示毫秒，否则显示秒 */
 const durationText = (ms) => (ms >= 1000 ? `${Math.round(ms / 1000)} 秒` : `${Math.round(ms)} 毫秒`);
 
@@ -165,7 +162,6 @@ const attachStreamGuards = (response, res, options = {}) => {
   let maxTimer = null;
   let finished = false; // 已经收尾（正常结束或被掐断），收尾只会做一次
   let aborted = false;  // 收尾的原因是「护栏掐断」
-  activeStreams += 1;
 
   const clearMaxTimer = () => {
     if (maxTimer) {
@@ -187,10 +183,7 @@ const attachStreamGuards = (response, res, options = {}) => {
   const dispose = () => {
     clearMaxTimer();
     detachSocketTimer();
-    if (!finished) {
-      finished = true;
-      activeStreams = Math.max(0, activeStreams - 1);
-    }
+    finished = true;
   };
 
   const abort = (reason) => {
@@ -288,6 +281,5 @@ module.exports = {
   applyAxiosDefaults,
   createGate,
   proxyGate,
-  streamGuardStats,
   attachStreamGuards
 };
