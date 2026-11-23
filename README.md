@@ -5,6 +5,8 @@
 
 应用和游戏各有独立的精选、分类、排行榜和重磅更新，数据直接来自华为应用市场平板客户端，不依赖 Shenjack，也不展示下载量或应用总数。
 
+探索、应用、游戏页共用搜索框；从探索页搜索会进入应用搜索结果。
+
 本项目基于 [XiaoChuangll/OpenStore](https://github.com/XiaoChuangll/OpenStore)（MIT License）修改。
 </div>
 

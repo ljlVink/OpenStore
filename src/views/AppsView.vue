@@ -1,51 +1,5 @@
 <template>
-  <div class="apps-view">
-    <header class="apps-header">
-      <h1>{{ catalogLabel }}</h1>
-      <div ref="searchContainer" class="search-container" @focusout="handleSearchFocusOut" @keydown.esc="closeDiscover">
-        <form class="search-bar" role="search" @submit.prevent="handleSearch">
-          <el-icon><Search /></el-icon>
-          <input
-            v-model="searchQuery"
-            aria-label="搜索应用、游戏"
-            placeholder="搜索应用、游戏…"
-            maxlength="50"
-            autocomplete="off"
-            @focus="openDiscover"
-          />
-          <button v-if="searchQuery" type="button" class="clear-search" aria-label="清空搜索" @click="searchQuery = ''">
-            <el-icon><CircleClose /></el-icon>
-          </button>
-          <button type="submit" class="search-submit">搜索</button>
-        </form>
-        <div v-if="discoverOpen && !searchQuery.trim()" class="discover-panel">
-          <h2>发现更多</h2>
-          <p v-if="discoverLoading" class="discover-state" role="status">正在加载…</p>
-          <div v-else-if="discoverFailed" class="discover-state" role="alert">
-            <p>暂时无法加载发现更多</p>
-            <button class="text-button" @click="openDiscover">重试</button>
-          </div>
-          <p v-else-if="!discoverApps.length" class="discover-state">暂无推荐应用</p>
-          <div v-else class="discover-list">
-            <RouterLink
-              v-for="app in discoverApps"
-              :key="app.app_id"
-              :to="appLocation(app)"
-              class="app-row discover-item"
-              @click="closeDiscover"
-            >
-              <el-image :src="app.icon_url" class="app-icon" fit="cover" loading="lazy">
-                <template #error><span class="icon-placeholder"><el-icon><Picture /></el-icon></span></template>
-              </el-image>
-              <span class="app-text">
-                <span class="app-name">{{ app.name }}</span>
-                <span class="app-description">{{ app.brief_desc || app.kind_name }}</span>
-              </span>
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-    </header>
+  <AppMarketPage class="apps-view" :title="catalogLabel" :catalog="catalog" :tab="activeTab" :query="searchTerm">
 
     <nav class="browse-tabs" :aria-label="`${catalogLabel}浏览`">
       <RouterLink
@@ -165,18 +119,19 @@
         <span v-else class="pill-button disabled" aria-disabled="true">已到最后一页</span>
       </nav>
     </main>
-  </div>
+  </AppMarketPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onActivated, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
-import { ArrowLeft, ArrowRight, CircleClose, Grid, Loading, Picture, Refresh, Search, Star, Trophy, Warning } from '@element-plus/icons-vue';
+import { ArrowLeft, ArrowRight, Grid, Loading, Picture, Refresh, Star, Trophy, Warning } from '@element-plus/icons-vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import {
-  getAppGalleryBrowse, getDiscoverApps, searchApps,
+  getAppGalleryBrowse, searchApps,
   type AppGalleryBrowse, type AppGalleryBrowseTab, type AppGalleryCatalog, type AppGalleryListApp
 } from '../services/next-api';
+import AppMarketPage from '../components/AppMarketPage.vue';
 import { usePageActive } from '../utils/page-active';
 
 defineOptions({ name: 'AppsView' });
@@ -214,7 +169,6 @@ const currentPage = computed(() => {
 });
 const isFiltered = computed(() => isSearch.value || Boolean(categoryName.value || rankName.value));
 const pageTitle = computed(() => isSearch.value ? `“${searchTerm.value}”的搜索结果` : categoryName.value || rankName.value);
-const searchQuery = ref('');
 const searchResults = ref<AppGalleryListApp[]>([]);
 const browse = ref<AppGalleryBrowse | null>(null);
 const loading = ref(false);
@@ -247,8 +201,6 @@ const formatUpdateDate = (date: string) => {
 const loadPage = async () => {
   const id = ++requestId;
   loadedLocation = route.fullPath;
-  searchQuery.value = searchTerm.value;
-  discoverOpen.value = false;
   loading.value = true;
   errorMessage.value = '';
   browse.value = null;
@@ -278,13 +230,6 @@ const loadPage = async () => {
   }
 };
 
-const handleSearch = () => {
-  closeDiscover();
-  void router.push({
-    path: browsePath.value,
-    query: { tab: activeTab.value, ...(searchQuery.value.trim() ? { q: searchQuery.value.trim() } : {}) }
-  });
-};
 const handleBack = () => {
   const from = (window.history.state as { back?: string } | null)?.back || '';
   if (from && from.split('?')[0] !== browsePath.value) {
@@ -294,36 +239,12 @@ const handleBack = () => {
   }
 };
 
-const searchContainer = ref<HTMLElement | null>(null);
-const discoverOpen = ref(false);
-const discoverApps = ref<AppGalleryListApp[]>([]);
-const discoverLoading = ref(false);
-const discoverFailed = ref(false);
-const openDiscover = async () => {
-  discoverOpen.value = true;
-  if (discoverApps.value.length || discoverLoading.value) return;
-  discoverLoading.value = true;
-  discoverFailed.value = false;
-  try {
-    discoverApps.value = await getDiscoverApps();
-  } catch {
-    discoverFailed.value = true;
-  } finally {
-    discoverLoading.value = false;
-  }
-};
-const closeDiscover = () => { discoverOpen.value = false; };
-const handleSearchFocusOut = (event: FocusEvent) => {
-  if (!(event.relatedTarget instanceof Node) || !searchContainer.value?.contains(event.relatedTarget)) closeDiscover();
-};
-
 watch(
   () => route.fullPath,
   () => {
     if (!pageActive.value || route.path !== browsePath.value) {
       ++requestId;
       loadedLocation = '';
-      closeDiscover();
       return;
     }
     void loadPage();
@@ -336,32 +257,7 @@ onActivated(() => {
 </script>
 
 <style scoped>
-.apps-view {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 28px;
-  color: var(--el-text-color-primary);
-}
-.apps-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.apps-header h1 { margin: 0; font-size: 28px; letter-spacing: -0.5px; }
-.search-container { position: relative; width: min(100%, 440px); }
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 8px 5px 16px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 999px;
-  background: var(--el-bg-color);
-  color: var(--el-text-color-secondary);
-}
-.search-bar:focus-within { border-color: var(--el-color-primary); }
-.search-bar input { min-width: 0; width: 100%; border: 0; outline: none; background: transparent; color: var(--el-text-color-primary); font: inherit; font-size: 14px; }
-.search-bar input::placeholder { color: var(--el-text-color-placeholder); }
 button { font: inherit; cursor: pointer; }
-.search-submit, .clear-search { border: 0; background: transparent; color: var(--el-text-color-secondary); }
-.search-submit { padding: 8px 12px; white-space: nowrap; color: var(--el-color-primary); }
-.clear-search { display: flex; padding: 4px; }
 .browse-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; max-width: 880px; margin: 0 auto 28px; }
 .browse-tab { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 8px; border-radius: 999px; background: var(--el-bg-color); color: var(--el-text-color-regular); font-size: 14px; white-space: nowrap; text-decoration: none; transition: background-color 0.15s; }
 .browse-tab.active { background: var(--el-text-color-primary); color: var(--el-bg-color); font-weight: 600; }
@@ -410,22 +306,11 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--el-color-primar
 .pill-button { display: inline-block; border: 1px solid var(--el-border-color-light); border-radius: 999px; padding: 9px 18px; background: var(--el-bg-color); color: var(--el-color-primary); text-decoration: none; font-size: 14px; }
 .pill-button:not(.disabled):hover { background: var(--el-fill-color); }
 .pill-button.disabled { color: var(--el-text-color-disabled); }
-.discover-panel { position: absolute; top: calc(100% + 10px); right: 0; z-index: 20; width: min(640px, calc(100vw - 56px)); box-sizing: border-box; max-height: min(65vh, 560px); overflow-y: auto; padding: 16px; border: 1px solid var(--el-border-color-light); border-radius: 20px; background: var(--el-bg-color-overlay); box-shadow: 0 12px 32px rgb(0 0 0 / 12%); }
-.discover-panel h2 { margin: 0 4px 10px; font-size: 17px; }
-.discover-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
-.discover-item { padding: 10px 4px; }
-.discover-item .app-icon { width: 44px; height: 44px; border-radius: 11px; }
-.discover-state { padding: 20px 4px; text-align: center; color: var(--el-text-color-secondary); font-size: 14px; }
-.text-button { padding: 5px; border: 0; background: transparent; color: var(--el-color-primary); }
 @media (max-width: 1150px) {
   .categories-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 }
 @media (max-width: 760px) {
-  .apps-view { padding: 20px 16px; }
-  .apps-header { gap: 16px; margin-bottom: 20px; }
-  .apps-header h1 { font-size: 24px; }
-  .search-container { width: min(100%, 360px); }
   .browse-tabs { gap: 8px; margin-bottom: 22px; }
   .browse-tab { font-size: 13px; gap: 5px; padding: 10px 4px; }
   .categories-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -440,16 +325,13 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--el-color-primar
   .detail-label { padding: 5px 10px; }
   .rank-position { width: 20px; }
   .updates-grid { grid-template-columns: 1fr; }
-  .discover-panel { width: min(640px, calc(100vw - 32px)); }
 }
 @media (max-width: 540px) {
-  .apps-header { align-items: stretch; flex-direction: column; gap: 14px; }
-  .search-container { width: 100%; }
   .browse-tab { padding-inline: 2px; }
   .browse-tab .el-icon { display: none; }
   .categories-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .category-card { min-height: 88px; }
-  .app-grid, .discover-list { grid-template-columns: 1fr; }
+  .app-grid { grid-template-columns: 1fr; }
   .app-section { border-radius: 16px; }
   .view-heading h2 { font-size: 20px; }
   .pagination { gap: 10px; font-size: 13px; }
