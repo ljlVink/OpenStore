@@ -323,25 +323,24 @@ server.listen(PORT, () => {
 });
 
 
-// Seed admin user
-db.get(`SELECT id FROM users WHERE username=?`, ['admin'], (err, row) => {
-  if (err) console.error(err);
-  const configuredPwd = String(process.env.ADMIN_PASSWORD || '').trim();
-  if (!row) {
-    // 没有配置密码时不要再回退到 'admin123' 这种公开的默认口令：
-    // 首次初始化改成生成随机密码并打印到启动日志，至少不是人人皆知的密码。
-    if (!configuredPwd) {
-      const generated = crypto.randomBytes(12).toString('base64url');
-      console.warn('[security] 未配置 ADMIN_PASSWORD，已为 admin 生成随机初始密码（仅本次启动打印）：');
-      console.warn(`[security] admin 初始密码: ${generated}`);
-      console.warn('[security] 请在 .env 里设置 ADMIN_PASSWORD 后重启服务，以替换初始密码。');
-      db.run(`INSERT INTO users (username, password_hash, role) VALUES (?,?,?)`, ['admin', bcrypt.hashSync(generated, 10), 'admin']);
-    } else {
-      db.run(`INSERT INTO users (username, password_hash, role) VALUES (?,?,?)`, ['admin', bcrypt.hashSync(configuredPwd, 10), 'admin']);
+// ADMIN_PASSWORD 只用于首次创建账号；已存在的密码以 SQLite 为准。
+db.get(`SELECT 1 FROM users WHERE username=?`, ['admin'], (err, row) => {
+  if (err) return console.error('[auth] 检查管理员账号失败：', err);
+  if (row) return;
+
+  const configuredPassword = String(process.env.ADMIN_PASSWORD || '').trim();
+  const initialPassword = configuredPassword || crypto.randomBytes(12).toString('base64url');
+  db.run(
+    `INSERT INTO users (username, password_hash, role) VALUES (?,?,?) ON CONFLICT(username) DO NOTHING`,
+    ['admin', bcrypt.hashSync(initialPassword, 10), 'admin'],
+    function (insertErr) {
+      if (insertErr) return console.error('[auth] 创建管理员账号失败：', insertErr);
+      if (!configuredPassword && this.changes) {
+        console.warn('[security] 未配置 ADMIN_PASSWORD，已生成随机初始密码。请登录后台修改密码。');
+        console.warn(`[security] admin 初始密码: ${initialPassword}`);
+      }
     }
-  } else if (configuredPwd) {
-    db.run(`UPDATE users SET password_hash=? WHERE id=?`, [bcrypt.hashSync(configuredPwd, 10), row.id]);
-  }
+  );
 });
 
 // 登录相关接口（原文件里就排在定时任务 / 建管理员账号之后）
