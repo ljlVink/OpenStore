@@ -1,7 +1,8 @@
 /*
  * 应用详情：直接读华为应用市场。
  *   - webedge/appinfo：应用信息 + 当前版本（大小、SDK、发布时间…）；
- *   - 网页版详情页 webAgAppDetail|<appId>：评分分布（fl.card.comment 的 starInfo）和备案号；
+ *   - 客户端详情页 app|<appId>：评分分布（fl.card.comment 的 starInfo）和备案号；
+ *     网页版 webAgAppDetail 经 ESA 中继（国内出口）会返回 rtnCode 102「app is filtered by appInfo」，所以走客户端接口；
  *   - 客户端 versionHistories|<appId>：版本历史，华为只给最近 25 个版本。
  * 字段名沿用前端已经在用的 snake_case（与原市场数据上游一致）。
  */
@@ -126,14 +127,9 @@ async function loadApp(id) {
   if (!appId) return null;
 
   const [detail, history] = await Promise.all([
-    post('/harmony/page-detail', {
-      pageId: `webAgAppDetail|${appId}`, pageNum: 1, pageSize: 100,
-      clientPackage: 'com.huawei.hmsapp.appgallery', accountZone: 'CN', zone: '', locale: 'zh',
-      businessParam: { animation: 0 }
-    }),
+    callClient('client.getPageDetail', { pageId: `app|${appId}`, pageNum: 1, pageSize: 100 }, { signal }),
     callClient('client.getPageDetail', { pageId: `versionHistories|${appId}`, pageNum: 1, pageSize: 100 }, { signal })
   ]);
-  if (String(detail?.rtnCode) !== '0') throw new Error('AppGallery app detail page rejected the request');
 
   return {
     info: { ...mapAppInfo(raw), ...parseDetailPage(detail) },

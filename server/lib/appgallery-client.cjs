@@ -15,7 +15,8 @@ const web = axios.create({
     Origin: 'https://appgallery.huawei.com',
     Referer: 'https://appgallery.huawei.com/'
   },
-  timeout: 5000,
+  // 经 ESA 中继是 Cloudflare → 国内 → 华为两段跨境，单次偶尔超过 5 秒；总时长由调用方的 AbortSignal 控制
+  timeout: 15000,
   maxRedirects: 0,
   maxContentLength: 2 * 1024 * 1024
 });
@@ -56,7 +57,8 @@ web.interceptors.request.use((config) => routeThroughRelay(config, bindings()));
 const store = axios.create({
   baseURL: 'https://store-drcn.hispace.dbankcloud.com/hwmarket/harmony',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 5000,
+  // Cloudflare 到 store-drcn 跨境，700 KB 的首页偶尔要 6 秒以上；总时长由调用方的 AbortSignal 控制
+  timeout: 15000,
   maxRedirects: 0,
   maxContentLength: 4 * 1024 * 1024
 });
