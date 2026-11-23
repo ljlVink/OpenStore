@@ -1,8 +1,7 @@
 /*
- * 环境变量敏感值的对称加密（AES-256-GCM）。
+ * 服务端敏感配置的对称加密（AES-256-GCM）。
  *
  * 密钥来源优先级：ENV_SECRET_KEY（hex） > server/secret.key > 首次启动随机生成并落盘。
- * 后台「环境变量」面板里标记为 secure 的键，落库前都过这里的 encrypt()。
  */
 const fs = require('fs');
 const path = require('path');

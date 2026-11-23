@@ -4,7 +4,7 @@
       <!--
         宽屏：左侧面板式导航（分组 + 菜单项 + 底部操作）。
         窄屏：导航变成顶部栏，只列分类，点分类才展开该分类下的菜单。
-        菜单项统一由 MENU_GROUPS 渲染，方便“设置菜单显示隐藏”里做勾选。
+        菜单项统一由 MENU_GROUPS 渲染，全部显示。
       -->
       <aside class="admin-sidebar" :class="{ 'is-collapsed': menuCollapsed, 'is-scrolled': isPageScrolled }">
       <template v-if="!isNarrow">
@@ -22,7 +22,7 @@
             class="admin-menu"
             @select="handleSelect"
           >
-            <el-menu-item-group v-for="group in visibleMenuGroups" :key="group.title" :title="group.title">
+            <el-menu-item-group v-for="group in MENU_GROUPS" :key="group.title" :title="group.title">
               <el-menu-item v-for="item in group.items" :key="item.key" :index="item.key">
                 <el-icon><component :is="item.icon" /></el-icon>
                 <template #title>{{ item.label }}</template>
@@ -31,51 +31,13 @@
           </el-menu>
         </div>
 
-        <!-- 底部两个操作：伸缩菜单栏 / 设置菜单显示隐藏（宝塔面板同款） -->
+        <!-- 底部操作：伸缩菜单栏 -->
         <div class="nav-actions">
           <el-tooltip :content="menuCollapsed ? '展开菜单栏' : '伸缩菜单栏'" placement="top" :show-after="150">
             <button class="nav-action" type="button" @click="toggleNavCollapsed">
               <el-icon><Expand v-if="menuCollapsed" /><Fold v-else /></el-icon>
             </button>
           </el-tooltip>
-
-          <!-- 设置面板做成两列、从按钮往上弹，避免又高又贴底 -->
-          <el-popover
-            placement="top-start"
-            :width="224"
-            :offset="10"
-            :show-arrow="false"
-            trigger="click"
-            popper-class="admin-nav-settings-popper"
-          >
-            <template #reference>
-              <button class="nav-action" type="button" title="设置菜单显示隐藏">
-                <el-icon><MenuSettingIcon /></el-icon>
-              </button>
-            </template>
-            <div class="nav-settings">
-              <div class="nav-settings-head">
-                <span>菜单显示</span>
-                <el-button link type="primary" size="small" @click="resetMenuVisibility">恢复默认</el-button>
-              </div>
-              <div class="nav-settings-body">
-                <div v-for="group in MENU_GROUPS" :key="group.title" class="nav-settings-group">
-                  <div class="nav-settings-group-title">{{ group.title }}</div>
-                  <div class="nav-settings-grid">
-                    <el-checkbox
-                      v-for="item in group.items"
-                      :key="item.key"
-                      :model-value="!hiddenMenuKeys.includes(item.key)"
-                      :disabled="item.key === active"
-                      @change="(checked: any) => setMenuVisible(item.key, !!checked)"
-                    >
-                      {{ item.label }}
-                    </el-checkbox>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </el-popover>
         </div>
       </template>
 
@@ -83,7 +45,7 @@
       <div v-else class="topnav">
         <div class="topnav-groups">
           <button
-            v-for="group in visibleMenuGroups"
+            v-for="group in MENU_GROUPS"
             :key="group.title"
             type="button"
             class="topnav-group"
@@ -155,54 +117,37 @@
   import { goBackOrHome } from '../../utils/route-scroll';
 import {
   DataLine,
-  Bell,
-  Picture,
-  View,
   List,
   Coin,
-  Key,
   Warning,
   Promotion,
-  Setting,
   Expand,
   Fold,
 } from '@element-plus/icons-vue';
 
-  import MenuSettingIcon from '../../components/MenuSettingIcon.vue';
   import BrandMark from '../../components/BrandMark.vue';
 
   /*
-   * 面板一律按需加载：公告管理带 Quill + markdown 渲染器，
-   * 访客/系统日志带 echarts，全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
+   * 面板一律按需加载：全部静态导入会让打开任意一个面板都要先下载整个管理端的依赖
    * （实测一次加载 240+ 个模块请求、12MB 左右）。改成异步组件后，只加载当前面板需要的那部分。
    */
   const DashboardOverviewView = defineAsyncComponent(() => import('./DashboardOverviewView.vue'));
-  const AnnouncementsView = defineAsyncComponent(() => import('./AnnouncementsView.vue'));
-  const SiteCardsAdminView = defineAsyncComponent(() => import('./SiteCardsAdminView.vue'));
-  const VisitorLogsView = defineAsyncComponent(() => import('./VisitorLogsView.vue'));
   const DatabaseAdminView = defineAsyncComponent(() => import('./DatabaseAdminView.vue'));
   const SystemLogsView = defineAsyncComponent(() => import('./SystemLogsView.vue'));
-  const EnvManagerView = defineAsyncComponent(() => import('./EnvManagerView.vue'));
   const IncidentsAdminView = defineAsyncComponent(() => import('./IncidentsAdminView.vue'));
-  const SystemSettingsView = defineAsyncComponent(() => import('./SystemSettingsView.vue'));
   const SeoSubmitView = defineAsyncComponent(() => import('./SeoSubmitView.vue'));
 
 type PaneKey =
   | 'overview'
-  | 'announcements'
-  | 'env'
-  | 'visitors'
   | 'logs'
-  | 'site-cards'
   | 'incidents'
   | 'database'
-  | 'seo'
-  | 'settings';
+  | 'seo';
 
 const PANE_KEYS: PaneKey[] = [
-  'overview', 'announcements', 'env',
-  'visitors', 'logs', 'site-cards', 'incidents',
-  'database', 'seo', 'settings'
+  'overview',
+  'logs', 'incidents',
+  'database', 'seo'
 ];
 
 const route = useRoute();
@@ -221,24 +166,18 @@ const active = ref<PaneKey>(paneFromQuery());
 // 面板 → 组件：全部挂载着，非当前面板加 is-parked 隐藏，切回来不重新请求
 const PANE_COMPONENTS: Record<PaneKey, Component> = {
   overview: DashboardOverviewView,
-  announcements: AnnouncementsView,
-  env: EnvManagerView,
   incidents: IncidentsAdminView,
-  'site-cards': SiteCardsAdminView,
-  visitors: VisitorLogsView,
   database: DatabaseAdminView,
   logs: SystemLogsView,
-  seo: SeoSubmitView,
-  settings: SystemSettingsView
+  seo: SeoSubmitView
 };
 
 /*
- * 数据总览要接快捷操作切面板的事件；「主题设置」自带标题，不传 embedded；
+ * 数据总览要接快捷操作切面板的事件；
  * 其余面板都用 embedded 让外层统一画标题行。
  */
 const paneProps = (key: PaneKey) => {
   if (key === 'overview') return { onSwitchTab: handleSwitchTab };
-  if (key === 'settings') return {};
   return { embedded: true };
 };
 
@@ -263,40 +202,27 @@ const warmUpRestPanes = () => {
     if (cursor < queue.length) window.setTimeout(mountNextBatch, 200);
   };
 
-  // 先给首屏（总览的走势图/统计）让出 300ms，再开始后台挂载
+  // 先给首屏面板让出 300ms，再开始后台挂载
   window.setTimeout(mountNextBatch, 300);
 };
 
 // 面板标题：侧边栏只显示名称，这里补一行标题 + 一句提示，让右侧内容有明确的落点
 const SECTIONS: Record<string, { title: string; hint: string }> = {
-  overview: { title: '数据总览', hint: '访问、内容与实时服务状态' },
-  announcements: { title: '公告管理', hint: '公告分类与发布' },
-  'site-cards': { title: '首页配置', hint: '探索页和推荐页的卡片与拖拽排序' },
-  visitors: { title: '访客日志', hint: '访问记录与筛选' },
+  overview: { title: '数据总览', hint: '常用操作入口' },
   database: { title: '数据管理', hint: '表数据、维护、备份与只读查询' },
   logs: { title: '系统日志', hint: '后台操作记录' },
-  env: { title: '环境变量', hint: '.env 配置项' },
   incidents: { title: '故障维护', hint: '故障与维护公告' },
-  seo: { title: 'SEO 收录', hint: '访客路径提交、IndexNow 与 sitemap' },
-  settings: { title: '主题设置', hint: '配色变量与组件预览' },
+  seo: { title: 'SEO 收录', hint: '前台路径提交、IndexNow 与 sitemap' },
 };
 
 const currentSection = computed(() => SECTIONS[active.value] ?? { title: '', hint: '' });
 
-// 菜单结构（分组 + 图标）：菜单渲染和“设置菜单显示隐藏”共用这份数据
+// 菜单结构（分组 + 图标），宽屏侧边栏和窄屏顶部栏共用
 const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: Component }[] }[] = [
   { title: '概览', items: [{ key: 'overview', label: '数据总览', icon: DataLine }] },
   {
-    title: '内容',
-    items: [
-      { key: 'announcements', label: '公告管理', icon: Bell },
-      { key: 'site-cards', label: '首页配置', icon: Picture },
-    ],
-  },
-  {
     title: '数据',
     items: [
-      { key: 'visitors', label: '访客日志', icon: View },
       { key: 'database', label: '数据管理', icon: Coin },
       { key: 'logs', label: '系统日志', icon: List },
     ],
@@ -304,46 +230,26 @@ const MENU_GROUPS: { title: string; items: { key: string; label: string; icon: C
   {
     title: '运维',
     items: [
-      { key: 'env', label: '环境变量', icon: Key },
       { key: 'incidents', label: '故障维护', icon: Warning },
       { key: 'seo', label: 'SEO 收录', icon: Promotion },
-      { key: 'settings', label: '主题设置', icon: Setting },
     ],
   },
 ];
 
 const NAV_COLLAPSED_KEY = 'admin.nav.collapsed';
-const NAV_HIDDEN_KEY = 'admin.nav.hidden';
-
-const readStoredJson = <T,>(key: string, fallback: T): T => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-// 伸缩菜单栏 / 菜单显示隐藏 都是本地偏好，存 localStorage
+// 伸缩菜单栏是本地偏好，存 localStorage
 const isNavCollapsed = ref(localStorage.getItem(NAV_COLLAPSED_KEY) === '1');
-const hiddenMenuKeys = ref<string[]>(readStoredJson<string[]>(NAV_HIDDEN_KEY, []));
 const isNarrow = ref(window.matchMedia('(max-width: 900px)').matches);
 // 窄屏是横向胶囊行，折叠态没有意义，强制展开
 const menuCollapsed = computed(() => isNavCollapsed.value && !isNarrow.value);
 
-const visibleMenuGroups = computed(() =>
-  MENU_GROUPS
-    .map((group) => ({ ...group, items: group.items.filter((item) => !hiddenMenuKeys.value.includes(item.key)) }))
-    .filter((group) => group.items.length > 0)
-);
-
 // 窄屏顶部栏：默认收起，点分类才展开该分类下的菜单
 const openGroupTitle = ref<string | null>(null);
 const activeGroupTitle = computed(
-  () => visibleMenuGroups.value.find((group) => group.items.some((item) => item.key === active.value))?.title ?? ''
+  () => MENU_GROUPS.find((group) => group.items.some((item) => item.key === active.value))?.title ?? ''
 );
 const openGroup = computed(
-  () => visibleMenuGroups.value.find((group) => group.title === openGroupTitle.value) ?? null
+  () => MENU_GROUPS.find((group) => group.title === openGroupTitle.value) ?? null
 );
 
 const toggleMobileGroup = (title: string) => {
@@ -446,27 +352,6 @@ const toggleNavCollapsed = () => {
   } catch {
     /* 隐私模式下写不进去，忽略 */
   }
-};
-
-const persistHiddenMenus = () => {
-  try {
-    localStorage.setItem(NAV_HIDDEN_KEY, JSON.stringify(hiddenMenuKeys.value));
-  } catch {
-    /* 隐私模式下写不进去，忽略 */
-  }
-};
-
-const setMenuVisible = (key: string, visible: boolean) => {
-  const next = new Set(hiddenMenuKeys.value);
-  if (visible) next.delete(key);
-  else next.add(key);
-  hiddenMenuKeys.value = Array.from(next);
-  persistHiddenMenus();
-};
-
-const resetMenuVisibility = () => {
-  hiddenMenuKeys.value = [];
-  persistHiddenMenus();
 };
 
 const router = useRouter();
@@ -696,13 +581,12 @@ const handleSwitchTab = (tabName: any) => {
   justify-content: center;
 }
 
-/* 底部操作：伸缩菜单栏 + 设置菜单显示隐藏 */
+/* 底部操作：伸缩菜单栏 */
 .nav-actions {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  /* 两个按钮分别贴左右两边 */
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 5px 8px;
   border-top: 1px solid var(--el-border-color-lighter);
 }
@@ -728,67 +612,10 @@ const handleSwitchTab = (tabName: any) => {
   color: var(--el-color-primary);
 }
 
-/* 折叠态窄，两个按钮改成上下排列 */
+/* 折叠态窄，按钮居中 */
 .admin-sidebar.is-collapsed .nav-actions {
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  justify-content: center;
   padding: 5px 0;
-}
-
-.nav-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 34px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.nav-settings-body {
-  max-height: calc(100vh - 240px);
-  overflow-y: auto;
-  padding: 6px 12px 10px;
-}
-
-.nav-settings-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.nav-settings-body::-webkit-scrollbar-thumb {
-  background-color: var(--el-border-color);
-  border-radius: 3px;
-}
-
-.nav-settings-group + .nav-settings-group {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.nav-settings-group-title {
-  padding: 0 0 2px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.nav-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 8px;
-}
-
-.nav-settings :deep(.el-checkbox) {
-  height: 26px;
-  margin-right: 0;
-}
-
-.nav-settings :deep(.el-checkbox__label) {
-  padding-left: 6px;
-  font-size: 13px;
 }
 
 .admin-content {
@@ -1162,13 +989,5 @@ const handleSwitchTab = (tabName: any) => {
     line-height: 18px;
     pointer-events: none;
   }
-}
-</style>
-
-<style>
-/* “设置菜单显示隐藏”的弹层挂在 body 上，去不掉 scoped，这里用全局样式收紧内边距 */
-.admin-nav-settings-popper {
-  padding: 0 !important;
-  overflow: hidden;
 }
 </style>

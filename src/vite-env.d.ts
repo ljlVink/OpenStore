@@ -5,15 +5,3 @@ declare module '*.vue' {
   const component: DefineComponent<{}, {}, any>
   export default component
 }
-
-interface ImportMetaEnv {
-  readonly VUE_APP_API_URL: string
-  readonly VUE_APP_API_KEY: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
-}
-
-declare module 'markdown-it-katex';
-declare module 'highlight.js';

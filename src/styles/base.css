@@ -41,12 +41,6 @@ html .el-button:focus {
   display: none;
 }
 
-/* Lower z-index for announcement guide tooltip so it goes under the header */
-
-html .el-popper.header-covered-tooltip {
-  z-index: 900 !important;
-}
-
 /* Hide scrollbar utility */
 
 .no-scrollbar::-webkit-scrollbar {

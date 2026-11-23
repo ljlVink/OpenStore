@@ -10,7 +10,7 @@
 | `tokens.css` | 设计令牌：主色/语义色、中性色阶、圆角、阴影、控件高度。改主题先改这里 |
 | `base.css` | 基础重置：`body`、字体平滑、滚动条隐藏、焦点环、点击高亮 |
 | `element-plus.css` | Element Plus 组件皮肤：表单、按钮、表格、分页、标签、折叠、通知等 |
-| `app.css` | 应用级形态：表格操作列、ECharts 浮层、拖拽状态等跨页面复用的类 |
+| `app.css` | 应用级形态：表格操作列、拖拽状态等跨页面复用的类 |
 
 引入顺序（`src/style.css`）：`base` → `tokens` → `element-plus` → `app`。
 
@@ -39,7 +39,7 @@
   （`embedded`）时不渲染；返回行为统一收在组件里（回后台首页，可用 `back-to` 覆盖）。
 - `AdminSection.vue` —— 「分区卡片」（标题行 + 说明标签 + 右侧操作 + 内容）。
   `variant="plain"` 用于并排的小卡片（不带分隔线），`head-wrap` 让标题行允许换行。
-  目前首页配置、系统日志、故障维护、公告管理、主题设置都用它。
+  目前系统日志、故障维护都用它。
 
 加新页面时优先复用这些组件，不要重新手写一套 `.section-card` / `.section-head`，
 也不要再各自写 `<el-page-header>` + `goBack`。

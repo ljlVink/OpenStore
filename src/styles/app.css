@@ -60,17 +60,6 @@ html .admin-view .el-table .action-cell {
   white-space: nowrap;
 }
 
-/*
- * ECharts tooltip 的公共图层：固定定位，所以隐藏后不会撑高文档，
- * 层级与 ECharts 自身 tooltip（z-index: 9999999）保持一致，仍然浮在页面之上。
- */
-.echarts-tooltip-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9999999;
-  pointer-events: none;
-}
-
 /* 后台拖拽排序卡片时：整页保持抓取光标、禁止选中文字 */
 body.is-card-dragging,
 body.is-card-dragging * {

@@ -3,8 +3,6 @@
 # CloseStore
 **CloseStore** 是一个专注于鸿蒙（HarmonyOS）应用发现与分享的第三方应用商店平台
 
-应用列表和详情不展示下载量；分类和设备卡片显示的是应用数量。
-
 本项目基于 [XiaoChuangll/OpenStore](https://github.com/XiaoChuangll/OpenStore)（MIT License）修改。
 </div>
 
@@ -33,11 +31,6 @@ THIS PROJECT IS UNDER DEVELOPMENT.
     <img src="https://wsrv.nl/?url=github.com/shenjackyuanjie.png&w=400&h=400&mask=circle" width="60" alt="shenjackyuanjie"/>
   </a>
 </div>
-
-
-## 关于与推荐
-
-「关于」页固定显示站点信息、Telegram 联系入口和版权，不提供后台配置。首页「推荐」页签只保留公告和应用卡片。
 
 ## 📄 许可证
 

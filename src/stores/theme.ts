@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { getThemeSettings } from '../services/api';
-import { buildColorVars, THEME_COLOR_TOKENS } from '../utils/theme-color';
 
 type ThemePreference = 'light' | 'dark' | 'auto';
 
@@ -40,49 +38,8 @@ export const useThemeStore = defineStore('theme', () => {
     return preference.value === 'dark';
   });
 
-  // Custom theme colors
-  const customTheme = ref<Record<string, string>>({});
-
-  const applyThemeVariables = () => {
-    const root = document.documentElement;
-    const derivedNames = ['3', '5', '7', '8', '9'].map((level) => `light-${level}`);
-
-    THEME_COLOR_TOKENS.forEach(({ key, name }) => {
-      const baseVar = `--el-color-${name}`;
-      const derivedVars = [...derivedNames.map((suffix) => `${baseVar}-${suffix}`), `${baseVar}-dark-2`];
-      const value = customTheme.value[key];
-
-      // 先清空，避免换成 rgba 这类算不出梯度的值时残留上一次的颜色
-      [baseVar, ...derivedVars].forEach((variable) => root.style.removeProperty(variable));
-
-      if (!value) {
-        // 空值 = 使用 Element Plus 默认色，连同派生梯度一起交还给默认主题
-        return;
-      }
-
-      Object.entries(buildColorVars(name, value, isDark.value)).forEach(([variable, color]) => {
-        root.style.setProperty(variable, color);
-      });
-    });
-  };
-
-  const loadThemeSettings = async () => {
-    try {
-      const settings = await getThemeSettings();
-      customTheme.value = settings;
-      applyThemeVariables();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const applyTheme = () => {
-    if (isDark.value) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    applyThemeVariables();
+    document.documentElement.classList.toggle('dark', isDark.value);
   };
 
   /*
@@ -103,7 +60,6 @@ export const useThemeStore = defineStore('theme', () => {
 
   // Initialize
   applyTheme();
-  loadThemeSettings();
 
-  return { isDark, preference, toggleTheme, customTheme, loadThemeSettings };
+  return { isDark, preference, toggleTheme };
 });

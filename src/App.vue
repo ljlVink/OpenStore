@@ -380,12 +380,7 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
         <el-dropdown v-else-if="isAuthed" trigger="click" @command="handleAdminCommand">
           <div class="logo-container is-clickable" role="button" tabindex="0">
             <BrandMark class="logo-icon mr-2" :size="28" />
-            <span
-              class="app-title"
-              :class="{ 'is-hidden-on-mobile': layoutStore.showCustomTitle }"
-            >
-              CloseStore
-            </span>
+            <span class="app-title">CloseStore</span>
           </div>
           <template #dropdown>
             <el-dropdown-menu>
@@ -404,20 +399,12 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
           @keydown.space.prevent="goAdminLogin"
         >
           <BrandMark class="logo-icon mr-2" :size="28" />
-          <span
-            class="app-title"
-            :class="{ 'is-hidden-on-mobile': layoutStore.showCustomTitle }"
-          >
-            CloseStore
-          </span>
+          <span class="app-title">CloseStore</span>
         </div>
       </div>
 
       <div class="header-center">
-        <transition name="fade-slide">
-          <span v-if="!layoutStore.showCustomTitle" class="page-title">{{ layoutStore.pageTitle }}</span>
-        </transition>
-        <div id="header-teleport-target" class="header-teleport-target"></div>
+        <span class="page-title">{{ layoutStore.pageTitle }}</span>
       </div>
       
       <div class="header-right">
@@ -660,27 +647,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   min-width: 40px;
 }
 
-/* Header Transitions - Global */
-</style>
-
-<style>
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-</style>
-
-<style scoped>
 .header-center {
   position: absolute;
   left: 50%;
@@ -698,15 +664,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   grid-area: 1 / 1;
   pointer-events: auto; /* Re-enable clicks on children */
 }
-
-.header-teleport-target {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-}
-
 
 .header-right {
   display: flex;
@@ -749,19 +706,6 @@ const handleAdminCommand = async (command: 'dashboard' | 'logout') => {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--el-text-color-primary);
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-
-@media (max-width: 768px) {
-  .app-title {
-    display: inline-block;
-    overflow: hidden;
-  }
-
-  .app-title.is-hidden-on-mobile {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
 }
 
 /*

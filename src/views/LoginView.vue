@@ -66,7 +66,7 @@
         <div class="panel-inner" :class="{ 'shake': shaking }">
           <header class="panel-head">
             <h1 class="panel-title">欢迎回来<span class="title-dot">!</span></h1>
-            <p class="panel-sub">{{ isAdmin ? '请登录后管理公告与站点配置' : '请登录后继续' }}</p>
+            <p class="panel-sub">{{ isAdmin ? '请登录后管理站点配置' : '请登录后继续' }}</p>
           </header>
 
           <form class="login-form" novalidate @submit.prevent="login">

@@ -1,5 +1,4 @@
 import { defineConfig, loadEnv } from 'vite'
-import type { Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { compression } from 'vite-plugin-compression2'
 import Components from 'unplugin-vue-components/vite'
@@ -25,47 +24,12 @@ import path from 'node:path'
   }
 })()
 
-/**
- * KaTeX 的样式表给每个字体都列了 woff2 / woff / ttf 三种格式，
- * Vite 会把这三种文件全部复制进 dist（20 个字重 × 3 = 60 个字体文件，约 800KB）。
- * 现在能跑这个后台的浏览器都支持 woff2，这里把另外两种从 src 里去掉，
- * 只留 woff2，dist 里就只剩 20 个字体文件。
- */
-function katexWoff2Only(): Plugin {
-  const WASTE_FORMATS = [
-    /,\s*url\([^)]*\.woff\)\s*format\(['"]woff['"]\)/g,
-    /,\s*url\([^)]*\.ttf\)\s*format\(['"]truetype['"]\)/g
-  ]
-
-  return {
-    name: 'openstore:katex-woff2-only',
-    enforce: 'pre',
-    transform(code, id) {
-      if (!/katex[\\/]dist[\\/]katex(\.min)?\.css$/.test(id)) return null
-      let out = code
-      let removed = 0
-      for (const pattern of WASTE_FORMATS) {
-        out = out.replace(pattern, () => {
-          removed += 1
-          return ''
-        })
-      }
-      if (!removed) {
-        this.warn('KaTeX 样式里没匹配到 woff/ttf 字体源，检查一下 katex 版本是否换了写法')
-        return null
-      }
-      return out
-    }
-  }
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [
       vue(),
-      katexWoff2Only(),
       // Element Plus 按需引入：只把模板里真正用到的组件及其样式打进包。
       // 之前是全量 import，入口包里塞了 ~1MB JS + 400KB CSS。
       Components({
@@ -121,7 +85,7 @@ export default defineConfig(({ mode }) => {
      * 这里曾经是 define: { 'process.env': env }。
      * loadEnv 的第三个参数是空前缀，等于把整个进程环境变量都塞进来（连 Windows 的 Path 都在内），
      * 再整体替换掉客户端代码里的 process.env。实测只要有人写下 process.env[key] 这种动态访问，
-     * 打包产物里就会带出 .env 的全部密钥（ADMIN_PASSWORD / JWT_SECRET / VUE_APP_API_KEY）
+     * 打包产物里就会带出 .env 的全部密钥（如 ADMIN_PASSWORD / JWT_SECRET）
      * 以及整台机器的环境变量，访客下载 js 就能读到。
      * 客户端要读公开配置请用 import.meta.env.VITE_XXX（Vite 只会暴露 VITE_ 前缀），不要再恢复这段 define。
      */
