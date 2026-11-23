@@ -9,119 +9,96 @@ const { getClientIp } = require('../lib/client-ip.cjs');
 module.exports = () => {
   const router = express.Router();
 
-  /*
-   * 脚本护栏的警告页预览：后台「运维 → 脚本拦截」面板用。
-   * 纯渲染，不调用护栏中间件 —— 不计数、不进封禁表、不影响任何 IP，点多少次都安全。
-   * 返回 JSON 而不是直接吐 HTML，是为了复用后台已有的 JWT 头鉴权（新窗口打开带不上 Authorization）。
-   */
-  router.get('/api/admin/script-guard/preview', requireAuth, (req, res) => {
-    res.json({ html: previewWarningPage() });
+  // All state is read from PG; no isolate-local settings or ban caches.
+  router.get('/api/admin/script-guard/preview', requireAuth, async (req, res) => {
+    res.json({ html: await previewWarningPage() });
   });
 
-  // 警告页自定义：读 / 存 / 恢复默认（存 system_settings，保存即生效，无需重启）
-  router.get('/api/admin/script-guard/page', requireAuth, (req, res) => {
-    res.json({ config: getPageConfig(), defaults: DEFAULT_PAGE_CONFIG });
+  router.get('/api/admin/script-guard/page', requireAuth, async (req, res) => {
+    res.json({ config: await getPageConfig(), defaults: DEFAULT_PAGE_CONFIG });
   });
 
-  router.put('/api/admin/script-guard/page', requireAuth, (req, res) => {
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ error: 'Invalid payload' });
-    }
-    savePageConfig(req.body, (err, config) => {
-      if (err) return res.status(500).json({ error: err.message });
-      logAction(req.user?.username, 'update', 'script_guard_page', null, { title: config.title });
-      res.json({ success: true, config });
-    });
+  router.put('/api/admin/script-guard/page', requireAuth, async (req, res) => {
+    if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Invalid payload' });
+    const config = await savePageConfig(req.body);
+    await logAction(req.user?.username, 'update', 'script_guard_page', null, { title: config.title });
+    res.json({ success: true, config });
   });
 
-  router.post('/api/admin/script-guard/page/reset', requireAuth, (req, res) => {
-    resetPageConfig((err, config) => {
-      if (err) return res.status(500).json({ error: err.message });
-      logAction(req.user?.username, 'update', 'script_guard_page', null, { reset: true });
-      res.json({ success: true, config });
-    });
+  router.post('/api/admin/script-guard/page/reset', requireAuth, async (req, res) => {
+    const config = await resetPageConfig();
+    await logAction(req.user?.username, 'update', 'script_guard_page', null, { reset: true });
+    res.json({ success: true, config });
   });
 
-  /* 放行名单：命中前缀的客户端不计次、不封禁（硬封禁不受影响）；只存库，为空即不放行 */
-  router.get('/api/admin/script-guard/allow', requireAuth, (req, res) => {
-    res.json({ list: getAllowList() });
+  router.get('/api/admin/script-guard/allow', requireAuth, async (req, res) => {
+    res.json({ list: await getAllowList() });
   });
 
-  router.put('/api/admin/script-guard/allow', requireAuth, (req, res) => {
-    if (!req.body || typeof req.body.list !== 'string') {
-      return res.status(400).json({ error: 'Invalid payload' });
-    }
-    saveAllowList(req.body.list, (err, list) => {
-      if (err) return res.status(500).json({ error: err.message });
-      logAction(req.user?.username, 'update', 'script_guard_allow', null, { list });
-      res.json({ success: true, list });
-    });
+  router.put('/api/admin/script-guard/allow', requireAuth, async (req, res) => {
+    if (typeof req.body?.list !== 'string') return res.status(400).json({ error: 'Invalid payload' });
+    const list = await saveAllowList(req.body.list);
+    await logAction(req.user?.username, 'update', 'script_guard_allow', null, { list });
+    res.json({ success: true, list });
   });
 
-  // 拦截记录：每次触发封禁落一条；active 是当前仍在封禁期内的 IP（内存态）
-  router.get('/api/admin/script-guard/blocks', requireAuth, (req, res) => {
-    listBlockRecords(req.query.limit, (err, items) => {
-      if (err) return res.status(500).json({ error: err.message });
-      const snapshot = scriptGuardSnapshot();
-      res.json({ items, active: snapshot.blocked, stats: snapshot.stats });
-    });
+  router.get('/api/admin/script-guard/blocks', requireAuth, async (req, res) => {
+    const [items, snapshot] = await Promise.all([listBlockRecords(req.query.limit), scriptGuardSnapshot()]);
+    res.json({ items, active: snapshot.blocked, stats: snapshot.stats });
   });
 
-  router.delete('/api/admin/script-guard/blocks', requireAuth, (req, res) => {
-    clearBlockRecords((err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      logAction(req.user?.username, 'delete', 'script_guard_blocks', null, {});
-      res.json({ success: true });
-    });
+  router.delete('/api/admin/script-guard/blocks', requireAuth, async (req, res) => {
+    await clearBlockRecords();
+    await logAction(req.user?.username, 'delete', 'script_guard_blocks', null, {});
+    res.json({ success: true });
   });
 
-  // 手动解封（误伤时用）：只清内存里的封禁状态，不动已写下的记录
-  router.post('/api/admin/script-guard/unblock', requireAuth, (req, res) => {
+  router.post('/api/admin/script-guard/unblock', requireAuth, async (req, res) => {
     const ip = String(req.body?.ip || '').trim();
     if (!ip) return res.status(400).json({ error: 'Missing ip' });
-    const released = unblockIp(ip);
-    logAction(req.user?.username, 'update', 'script_guard_unblock', null, { ip, released });
+    const released = await unblockIp(ip);
+    await logAction(req.user?.username, 'update', 'script_guard_unblock', null, { ip, released });
     res.json({ success: true, released });
   });
 
-  // 一键触发真实拦截：对当前管理员 IP 真封一次（写记录 + 进封禁表），重复触发按 4 倍升级
-  router.post('/api/admin/script-guard/trigger', requireAuth, (req, res) => {
-    const ip = getClientIp(req);
-    const result = triggerBlock(ip, { ua: req.body?.ua, path: req.body?.path });
+  router.post('/api/admin/script-guard/trigger', requireAuth, async (req, res) => {
+    const result = await triggerBlock(getClientIp(req), { ua: req.body?.ua, path: req.body?.path });
     if (!result) return res.status(400).json({ error: '无法解析请求来源 IP' });
-    logAction(req.user?.username, 'update', 'script_guard_trigger', null, {
-      ip: result.ip,
-      strikes: result.strikes,
-      blockMs: result.blockMs
+    await logAction(req.user?.username, 'update', 'script_guard_trigger', null, {
+      ip: result.ip, strikes: result.strikes, blockMs: result.blockMs
     });
     res.json(result);
   });
 
-  // 硬封禁名单：不区分 UA，命中后该 IP 的一切请求都返回 429（后台路径例外，可进来解封）
-  router.get('/api/admin/script-guard/bans', requireAuth, (req, res) => {
-    res.json({ items: listHardBans() });
+  router.get('/api/admin/script-guard/bans', requireAuth, async (req, res) => {
+    res.json({ items: await listHardBans() });
   });
 
-  router.post('/api/admin/script-guard/bans', requireAuth, (req, res) => {
+  router.post('/api/admin/script-guard/bans', requireAuth, async (req, res) => {
     const ip = String(req.body?.ip || '').trim();
     if (!ip) return res.status(400).json({ error: 'Missing ip' });
-    // durationMs 不传或 0 = 永久
     const durationMs = Math.max(Number(req.body?.durationMs) || 0, 0);
-    hardBanIp(ip, { reason: req.body?.reason, durationMs }, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
-      logAction(req.user?.username, 'update', 'script_guard_ban', null, { ip, durationMs });
-      res.json({ success: true, items: listHardBans() });
-    });
+    try {
+      await hardBanIp(ip, { reason: req.body?.reason, durationMs });
+    } catch (err) {
+      if (err.message === 'IP 格式不正确') return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    await logAction(req.user?.username, 'update', 'script_guard_ban', null, { ip, durationMs });
+    res.json({ success: true, items: await listHardBans() });
   });
 
-  router.post('/api/admin/script-guard/bans/remove', requireAuth, (req, res) => {
+  router.post('/api/admin/script-guard/bans/remove', requireAuth, async (req, res) => {
     const ip = String(req.body?.ip || '').trim();
     if (!ip) return res.status(400).json({ error: 'Missing ip' });
-    hardUnbanIp(ip, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
-      logAction(req.user?.username, 'delete', 'script_guard_ban', null, { ip });
-      res.json({ success: true, items: listHardBans() });
-    });
+    try {
+      await hardUnbanIp(ip);
+    } catch (err) {
+      if (err.message === 'IP 格式不正确') return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    await logAction(req.user?.username, 'delete', 'script_guard_ban', null, { ip });
+    res.json({ success: true, items: await listHardBans() });
   });
 
   return router;

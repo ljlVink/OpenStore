@@ -5,7 +5,7 @@
  * 构建期 dist/sitemap.xml 只有栏目页兜底，详情页由此处补充。
  * 结果缓存 10 分钟；站点 URL 变更时由调用方 invalidateSitemapCache() 清除。
  */
-const db = require('../database.cjs');
+const { query } = require('../database.cjs');
 
 /** 与 scripts/generate-sitemap.js 的兜底清单保持一致 */
 const STATIC_ROUTES = ['/', '/games', '/apps', '/about'];
@@ -37,14 +37,13 @@ const encodePath = (value) =>
     .map((seg) => encodeURIComponent(seg))
     .join('/');
 
-const all = (sql, params = []) =>
-  new Promise((resolve) => db.all(sql, params, (err, rows) => resolve(err ? [] : rows || [])));
-
 /** 标准化为 YYYY-MM-DD；无法解析时返回空串 */
 const toDate = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
   const text = String(value || '').trim();
   if (!text) return '';
-  const date = new Date(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`);
+  const normalized = text.replace(' ', 'T');
+  const date = new Date(/(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 };
 
@@ -70,10 +69,10 @@ async function buildSitemap(siteUrl) {
   }
 
   // 应用详情页：/apps/:id 的 id 取自 apps.original_id
-  const apps = await all(
+  const { rows: apps } = await query(
     `SELECT original_id, updated_at FROM apps
       WHERE enabled = 1 AND original_id IS NOT NULL AND original_id != ''
-      ORDER BY updated_at DESC LIMIT ?`,
+      ORDER BY updated_at DESC LIMIT $1`,
     [MAX_APP_URLS]
   );
   for (const app of apps) {

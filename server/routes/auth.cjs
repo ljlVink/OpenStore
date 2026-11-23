@@ -1,102 +1,77 @@
-/*
- * 登录 / 刷新 token / 改密码
- */
+/* Authentication preserves imported bcrypt hashes; password changes only touch PG. */
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const db = require('../database.cjs');
-const { JWT_SECRET, requireAuth, logAction, loginKeyOf, loginLockRemainingMs, recordLoginFailure, clearLoginFailures, LOGIN_DUMMY_HASH } = require('../middleware/auth.cjs');
+const { query } = require('../database.cjs');
+const { getJwtSecret, requireAuth, logAction, loginKeyOf, loginLockRemainingMs, recordLoginFailure, clearLoginFailures, LOGIN_DUMMY_HASH } = require('../middleware/auth.cjs');
 
 const router = express.Router();
+const signToken = (user) => jwt.sign(
+  { uid: user.id, username: user.username, role: user.role },
+  getJwtSecret(), { algorithm: 'HS256', expiresIn: '2h' });
 
-// Auth endpoints
-router.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
+async function login(req, res) {
+  getJwtSecret();
+  const { username, password } = req.body || {};
   const loginKey = loginKeyOf(req, username);
-  const lockedMs = loginLockRemainingMs(loginKey);
+  const lockedMs = await loginLockRemainingMs(loginKey);
   if (lockedMs > 0) {
     res.setHeader('Retry-After', String(Math.ceil(lockedMs / 1000)));
     return res.status(429).json({ error: `尝试过于频繁，请 ${Math.ceil(lockedMs / 1000)} 秒后再试` });
   }
-  db.get(`SELECT * FROM users WHERE username=?`, [username], (err, user) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!bcrypt.compareSync(password || '', user?.password_hash || LOGIN_DUMMY_HASH) || !user) {
-      recordLoginFailure(loginKey);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    clearLoginFailures(loginKey);
-    const token = jwt.sign({ uid: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
-    res.json({ token });
-  });
-});
-
-router.post('/api/admin/auth/login', (req, res) => {
-  const { username, password } = req.body;
-  const loginKey = loginKeyOf(req, username);
-  const lockedMs = loginLockRemainingMs(loginKey);
-  if (lockedMs > 0) {
-    res.setHeader('Retry-After', String(Math.ceil(lockedMs / 1000)));
-    return res.status(429).json({ error: `尝试过于频繁，请 ${Math.ceil(lockedMs / 1000)} 秒后再试` });
+  const { rows } = await query('SELECT * FROM users WHERE username = $1', [String(username || '')]);
+  const user = rows[0];
+  const matches = await bcrypt.compare(typeof password === 'string' ? password : '', user?.password_hash || LOGIN_DUMMY_HASH);
+  if (!matches || !user) {
+    await recordLoginFailure(loginKey);
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
-  db.get(`SELECT * FROM users WHERE username=?`, [username], (err, user) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!bcrypt.compareSync(password || '', user?.password_hash || LOGIN_DUMMY_HASH) || !user) {
-      recordLoginFailure(loginKey);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    clearLoginFailures(loginKey);
-    const token = jwt.sign({ uid: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
-    res.json({ token });
-  });
-});
+  await clearLoginFailures(loginKey);
+  res.json({ token: signToken(user) });
+}
 
-router.post('/api/admin/auth/refresh', requireAuth, (req, res) => {
+router.post('/api/auth/login', login);
+router.post('/api/admin/auth/login', login);
+
+router.post('/api/admin/auth/refresh', requireAuth, async (req, res) => {
   const uid = req.user?.uid;
   if (!uid) return res.status(401).json({ error: 'Unauthorized' });
-  db.get(`SELECT * FROM users WHERE id=?`, [uid], (err, user) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const token = jwt.sign({ uid: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
-    res.json({ token });
-  });
+  const { rows } = await query('SELECT * FROM users WHERE id = $1', [uid]);
+  if (!rows[0]) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({ token: signToken(rows[0]) });
 });
 
-function changePassword(req, res) {
-  const { old_password, new_password } = req.body;
+async function changePassword(req, res) {
+  const { old_password, new_password } = req.body || {};
   if (!old_password || !new_password) return res.status(400).json({ error: 'Missing parameters' });
-  function isPasswordComplex(p) {
-    return typeof p === 'string'
-      && p.length >= 8
-      && /[A-Z]/.test(p)
-      && /[a-z]/.test(p)
-      && /\d/.test(p)
-      && /[^A-Za-z0-9]/.test(p);
-  }
-  if (!isPasswordComplex(new_password)) {
-    logAction(req.user?.username, 'password_change_failed', 'users', req.user?.uid, { reason: 'complexity' });
+  const uid = req.user?.uid;
+  const failed = (reason) => logAction(req.user?.username, 'password_change_failed', 'users', uid, { reason });
+  if (typeof new_password !== 'string' || new_password.length < 8 ||
+      !/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) ||
+      !/\d/.test(new_password) || !/[^A-Za-z0-9]/.test(new_password)) {
+    await failed('complexity');
     return res.status(400).json({ error: '新密码不符合复杂度要求' });
   }
-  const uid = req.user?.uid;
-  db.get(`SELECT * FROM users WHERE id=?`, [uid], (err, user) => {
-    if (err) {
-      logAction(req.user?.username, 'password_change_failed', 'users', uid, { reason: 'db_error' });
-      return res.status(500).json({ error: err.message });
-    }
-    if (!user) {
-      logAction(req.user?.username, 'password_change_failed', 'users', uid, { reason: 'user_not_found' });
-      return res.status(404).json({ error: '用户不存在' });
-    }
-    if (!bcrypt.compareSync(old_password || '', user.password_hash)) {
-      logAction(req.user?.username, 'password_change_failed', 'users', uid, { reason: 'wrong_old_password' });
-      return res.status(401).json({ error: '旧密码不正确' });
-    }
-    const hash = bcrypt.hashSync(new_password, 10);
-    db.run(`UPDATE users SET password_hash=? WHERE id=?`, [hash, uid], function(e2){
-      if (e2) return res.status(500).json({ error: e2.message });
-      logAction(req.user?.username, 'password_change', 'users', uid);
-      res.json({ ok: true });
-    });
-  });
+  const { rows } = await query('SELECT * FROM users WHERE id = $1', [uid]);
+  const user = rows[0];
+  if (!user) {
+    await failed('user_not_found');
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  if (!await bcrypt.compare(typeof old_password === 'string' ? old_password : '', user.password_hash)) {
+    await failed('wrong_old_password');
+    return res.status(401).json({ error: '旧密码不正确' });
+  }
+  const hash = await bcrypt.hash(new_password, 10);
+  // Compare-and-set prevents simultaneous changes from silently overwriting one another.
+  const result = await query('UPDATE users SET password_hash = $1 WHERE id = $2 AND password_hash = $3 RETURNING id',
+    [hash, uid, user.password_hash]);
+  if (!result.rowCount) {
+    await failed('password_changed');
+    return res.status(409).json({ error: '密码已更改，请重新登录后再试' });
+  }
+  await logAction(req.user?.username, 'password_change', 'users', uid);
+  res.json({ ok: true });
 }
 
 router.post('/api/admin/auth/change-password', requireAuth, changePassword);

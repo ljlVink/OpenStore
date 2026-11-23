@@ -171,7 +171,7 @@ const warmUpRestPanes = () => {
 // 面板标题：侧边栏只显示名称，这里补一行标题 + 一句提示，让右侧内容有明确的落点
 const SECTIONS: Record<PaneKey, { title: string; hint: string }> = {
   'script-guard': { title: '脚本拦截', hint: '拦截记录、封禁与警告页设置' },
-  database: { title: '数据管理', hint: '表数据、维护、备份与只读查询' },
+  database: { title: '数据管理', hint: '表数据浏览与只读查询' },
   logs: { title: '系统日志', hint: '后台操作记录' },
   incidents: { title: '故障维护', hint: '故障与维护公告' },
   seo: { title: 'SEO 收录', hint: '前台路径提交、IndexNow 与 sitemap' },

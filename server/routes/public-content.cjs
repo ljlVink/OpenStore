@@ -2,7 +2,7 @@
  * 前台公开内容：应用卡片、应用列表与搜索、应用详情、专题
  */
 const express = require('express');
-const db = require('../database.cjs');
+const { query } = require('../database.cjs');
 const { getAppGalleryTopic, getAppGalleryExplore } = require('../lib/appgallery-topics.cjs');
 const { getAppGalleryApp } = require('../lib/appgallery-apps.cjs');
 const { getAppGalleryDiscoverApps, searchAppGallery } = require('../lib/appgallery-lists.cjs');
@@ -17,13 +17,14 @@ function isBrowseLabel(value, allowed) {
   );
 }
 
-router.get('/api/public/apps', (req, res) => {
-  db.all(`SELECT id, name, provider, bg_url, icon_url, download_url, enabled, kind_name,
-                 average_rating, original_id, created_at, updated_at
-          FROM apps WHERE enabled=1 ORDER BY id DESC`, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+router.get('/api/public/apps', async (req, res) => {
+  try {
+    const { rows } = await query(`SELECT id, name, provider, bg_url, icon_url, download_url, enabled,
+      kind_name, average_rating, original_id, created_at, updated_at FROM apps WHERE enabled=1 ORDER BY id DESC`);
     res.json({ items: rows });
-  });
+  } catch {
+    res.status(500).json({ error: '读取应用列表失败' });
+  }
 });
 
 router.get('/api/public/apps/browse', async (req, res) => {

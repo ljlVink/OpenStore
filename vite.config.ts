@@ -1,6 +1,5 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { compression } from 'vite-plugin-compression2'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import fs from 'node:fs'
@@ -25,9 +24,7 @@ import path from 'node:path'
 })()
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
+export default defineConfig({
     plugins: [
       vue(),
       // Element Plus 按需引入：只把模板里真正用到的组件及其样式打进包。
@@ -39,23 +36,6 @@ export default defineConfig(({ mode }) => {
         dts: false,
         // 自己 import 的组件（图标等）不重复生成
         dirs: ['src/components']
-      }),
-      /*
-       * 预压缩旁文件，配合 nginx 的 gzip_static 直接发 .gz，省 CPU 又省带宽。
-       *
-       * 注意 vite-plugin-compression2 v2 的参数名是 algorithms（复数）：
-       * 之前写的 algorithm: 'gzip' 被插件忽略，它按默认值 ["gzip","brotliCompress"]
-       * 同时生成了 .gz 和 .br。而服务器上的 brotli_static 一直是注释状态
-       * （需要 nginx 自己编译 ngx_brotli），.br 从来没被发出去过，
-       * dist 里因此白白多了一半文件（147 个 .br、1.2MB）。这里显式只留 gzip。
-       *
-       * 哪天服务器真的开了 brotli_static，把 algorithms 改成
-       * ['gzip','brotliCompress'] 即可（.br 体积比 .gz 还小一点）。
-       */
-      compression({
-        include: [/\.js$/, /\.css$/, /\.html$/, /\.json$/, /\.xml$/, /\.svg$/],
-        threshold: 1024, // 只压 1KB 以上的文件
-        algorithms: ['gzip'],
       }),
     ],
     test: {
@@ -81,30 +61,18 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    /*
-     * 这里曾经是 define: { 'process.env': env }。
-     * loadEnv 的第三个参数是空前缀，等于把整个进程环境变量都塞进来（连 Windows 的 Path 都在内），
-     * 再整体替换掉客户端代码里的 process.env。实测只要有人写下 process.env[key] 这种动态访问，
-     * 打包产物里就会带出 .env 的全部密钥（如 ADMIN_PASSWORD / JWT_SECRET）
-     * 以及整台机器的环境变量，访客下载 js 就能读到。
-     * 客户端要读公开配置请用 import.meta.env.VITE_XXX（Vite 只会暴露 VITE_ 前缀），不要再恢复这段 define。
-     */
+    // Frontend HMR; production API and WebSocket routing belong to the Worker.
     server: {
       proxy: {
         '/api': {
-          target: `http://localhost:${env.PORT || 3001}`,
-          changeOrigin: true,
-        },
-        '/uploads': {
-          target: `http://localhost:${env.PORT || 3001}`,
+          target: 'http://localhost:8787',
           changeOrigin: true,
         },
         '/ws': {
-          target: `http://localhost:${env.PORT || 3001}`,
+          target: 'http://localhost:8787',
           ws: true,
           changeOrigin: true,
         }
       }
     }
-  }
 })

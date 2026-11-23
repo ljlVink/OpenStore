@@ -1,128 +1,65 @@
-/*
- * 管理员认证与操作日志。
- *
- * 包含三部分：
- *   1. JWT 密钥（未配置时每次启动随机生成，宁可让旧登录态失效也不用可预测密钥）；
- *   2. 登录失败限流（进程内内存版）；
- *   3. requireAuth 中间件与 logAction 操作日志。
- */
-const crypto = require('crypto');
+/* Required Workers secret, distributed login throttling, and durable audit logs. */
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const db = require('../database.cjs');
+const { query } = require('../database.cjs');
+const { bindings, defer } = require('../lib/runtime.cjs');
 const { getClientIp } = require('../lib/client-ip.cjs');
 const { broadcast } = require('../lib/realtime.cjs');
+const { jwtSecretOf } = require('../lib/secret.cjs');
 
-// JWT 密钥必须显式配置：以前回退到固定的 'dev-secret-change-me'，任何人知道这个默认值
-// 就能自己签发管理员 token，后台接口 / SSE / WS 会全部失守。
-// 未配置时退化为「每次启动随机生成」——宁可让旧登录态失效，也不能用可预测的密钥。
-const JWT_SECRET = (() => {
-  const configured = String(process.env.JWT_SECRET || '').trim();
-  if (configured && configured !== 'dev-secret-change-me') return configured;
-  console.warn('[security] 未配置 JWT_SECRET（或仍在使用默认值），已临时生成随机密钥。');
-  console.warn('[security] 重启后所有登录态会失效，请在 .env 中设置一个足够长的随机 JWT_SECRET。');
-  return crypto.randomBytes(48).toString('hex');
-})();
-// Auth helpers
-/* 登录失败限流（进程内内存版）。
- * 之前登录接口没有任何失败限制，配合「没配 ADMIN_PASSWORD 就用默认口令」等于把后台敞开。
- * 规则：同一 IP + 用户名连续失败 LOGIN_MAX_FAILURES 次后锁定 LOGIN_LOCK_MS，成功即清零。 */
-const LOGIN_MAX_FAILURES = Math.max(Number(process.env.LOGIN_MAX_FAILURES) || 5, 1);
-const LOGIN_LOCK_MS = Math.max(Number(process.env.LOGIN_LOCK_MS) || 15 * 60 * 1000, 1000);
-/** 失败计数表的硬上限，防止大量不同 IP/用户名把内存撑满 */
-const LOGIN_FAILURE_MAP_MAX = Math.max(Number(process.env.LOGIN_FAILURE_MAP_MAX) || 5000, 100);
-const loginFailureMap = new Map(); // key -> { count, firstAt, lockedUntil }
+const getJwtSecret = () => jwtSecretOf(bindings());
 
-const loginKeyOf = (req, username) =>
-  // 与脚本护栏用同一套取 IP 逻辑，避免两处口径不一致
-  `${getClientIp(req)}|${String(username || '').toLowerCase()}`;
-
-const loginLockRemainingMs = (key) => {
-  const entry = loginFailureMap.get(key);
-  if (!entry?.lockedUntil) return 0;
-  const left = entry.lockedUntil - Date.now();
-  if (left <= 0) {
-    loginFailureMap.delete(key);
-    return 0;
-  }
-  return left;
+// 用户名截断后再拼 key，避免超长用户名把登录失败表撑大
+const loginKeyOf = (req, username) => `${getClientIp(req)}|${String(username || '').slice(0, 64).toLowerCase()}`;
+const loginLockRemainingMs = async (key) => {
+  const { rows } = await query(
+    `SELECT GREATEST(locked_until - floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint, 0) AS remaining
+     FROM login_failures WHERE key = $1`, [key]);
+  return Number(rows[0]?.remaining || 0);
 };
 
-const recordLoginFailure = (key) => {
-  const now = Date.now();
-  const entry = loginFailureMap.get(key) || { count: 0, firstAt: now };
-  if (now - entry.firstAt > LOGIN_LOCK_MS) {
-    entry.count = 0;
-    entry.firstAt = now;
-  }
-  entry.count += 1;
-  if (entry.count >= LOGIN_MAX_FAILURES) entry.lockedUntil = now + LOGIN_LOCK_MS;
-  loginFailureMap.set(key, entry);
-
-  // 防止 map 被大量不同用户名撑爆
-  if (loginFailureMap.size > LOGIN_FAILURE_MAP_MAX) {
-    for (const [k, v] of loginFailureMap) {
-      if (!v.lockedUntil && now - v.firstAt > LOGIN_LOCK_MS) loginFailureMap.delete(k);
-      if (loginFailureMap.size <= LOGIN_FAILURE_MAP_MAX / 2) break;
-    }
-  }
-  // 全都被锁时上面的清理删不掉东西，这里兜底丢最老的几条（宁可少记几个攻击 IP 的次数）
-  while (loginFailureMap.size > LOGIN_FAILURE_MAP_MAX) {
-    const oldest = loginFailureMap.keys().next().value;
-    if (oldest === undefined) break;
-    loginFailureMap.delete(oldest);
-  }
+const recordLoginFailure = async (key) => {
+  const env = bindings();
+  const maxFailures = Math.max(Number(env.LOGIN_MAX_FAILURES) || 5, 1);
+  const lockMs = Math.max(Number(env.LOGIN_LOCK_MS) || 15 * 60 * 1000, 1000);
+  await query('SELECT record_login_failure($1, $2, $3)', [key, maxFailures, lockMs]);
+  // 窗口已过且未锁定的记录与不存在等价（record_login_failure 会重置它们），顺手清掉，表大小随攻击速率封顶
+  defer(query(
+    `DELETE FROM login_failures
+     WHERE locked_until <= floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint
+       AND first_at <= floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint - $1`, [lockMs]));
 };
 
-const clearLoginFailures = (key) => loginFailureMap.delete(key);
+const clearLoginFailures = async (key) => {
+  await query('DELETE FROM login_failures WHERE key = $1', [key]);
+};
 
-// 用户名不存在时也走一次 bcrypt 比对，避免用响应耗时探测某个用户名是否存在
-const LOGIN_DUMMY_HASH = bcrypt.hashSync('openstore-dummy-password', 10);
+// Precomputed cost-10 bcrypt hash: missing users still pay the same comparison.
+const LOGIN_DUMMY_HASH = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 function requireAuth(req, res, next) {
+  let secret;
+  try { secret = getJwtSecret(); } catch (err) { return next(err); }
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const data = jwt.verify(token, JWT_SECRET);
+    const data = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    if (data.role !== 'admin' || !Number.isFinite(data.exp)) throw new Error('Unauthorized');
     req.user = data;
     next();
   } catch {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }
-function logAction(actor, action, entity, entity_id, payload) {
-  const pStr = JSON.stringify(payload || {});
-  /*
-   * 同时往终端打一行。写操作是「谁改了什么」最直接的线索，
-   * 后台面板里能看到，但跑在 pm2 / systemd 下光看日志文件也应该看得见。
-   */
-  const target = entity_id ? `${entity} #${entity_id}` : entity;
-  const detail = pStr && pStr !== '{}' ? ` ${pStr.slice(0, 120)}` : '';
-  console.log(`[${new Date().toTimeString().slice(0, 8)}] OPS   ${actor || 'unknown'} ${action} ${target}${detail}`);
 
-  db.run(
-    `INSERT INTO operation_logs (actor, action, entity, entity_id, payload) VALUES (?,?,?,?,?)`,
-    [actor || 'unknown', action, entity, entity_id || null, pStr],
-    function(err) {
-      if (!err) {
-        // Construct the log object to broadcast
-        // Note: created_at is generated by DB default CURRENT_TIMESTAMP, so we approximate it here or query it.
-        // For UI refresh, approximate is usually fine, or we can just trigger a reload signal.
-        // Sending the object allows immediate UI update without refetch if desired.
-        const newLog = {
-          id: this.lastID,
-          actor: actor || 'unknown',
-          action,
-          entity,
-          entity_id: entity_id || null,
-          payload: pStr,
-          created_at: new Date().toISOString()
-        };
-        broadcast('logs:new', newLog);
-      }
-    }
-  );
+async function logAction(actor, action, entity, entity_id, payload) {
+  const pStr = JSON.stringify(payload || {});
+  const { rows } = await query(
+    `INSERT INTO operation_logs (actor, action, entity, entity_id, payload) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [actor || 'unknown', action, entity, entity_id || null, pStr]);
+  const target = entity_id ? `${entity} #${entity_id}` : entity;
+  console.log(`OPS ${actor || 'unknown'} ${action} ${target} ${pStr.slice(0, 120)}`);
+  defer(broadcast('logs:new', rows[0]));
 }
 
-module.exports = { JWT_SECRET, requireAuth, logAction, loginKeyOf, loginLockRemainingMs, recordLoginFailure, clearLoginFailures, LOGIN_DUMMY_HASH };
+module.exports = { getJwtSecret, requireAuth, logAction, loginKeyOf, loginLockRemainingMs, recordLoginFailure, clearLoginFailures, LOGIN_DUMMY_HASH };

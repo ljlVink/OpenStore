@@ -370,7 +370,6 @@ const ACTION_LABELS: Record<string, string> = {
   logout: '退出',
   clear_logs: '清空日志',
   replay: '请求重放',
-  upload: '上传文件',
   env_set: '修改环境变量',
   env_set_plain: '修改环境变量',
   password_change: '修改密码',

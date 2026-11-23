@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { parseDbTime, formatDbTime, formatDbDate } from '../../src/utils/datetime';
 
 /*
- * SQLite 时间戳按 UTC 存储且不带时区标记，直接交给 new Date() 会被当成本地时间。
+ * 不带时区标记的时间戳按 UTC 解释，直接交给 new Date() 会被当成本地时间。
  * 这里固定 2026-10-13 17:26:46 UTC（= 北京时间 2026-10-14 01:26:46）作为基准。
  */
-describe('SQLite 时间戳格式化', () => {
+describe('数据库时间戳格式化', () => {
   it('无时区标记的字符串按 UTC 解释', () => {
     const date = parseDbTime('2026-10-13 17:26:46');
     expect(date?.toISOString()).toBe('2026-10-13T17:26:46.000Z');

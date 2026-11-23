@@ -61,7 +61,7 @@
         </el-form-item>
 
         <el-form-item label="站点 URL">
-          <el-input v-model="form.siteUrl" size="small" placeholder="https://next.betahub.tech" />
+          <el-input v-model="form.siteUrl" size="small" placeholder="https://ag.ljlvink.top" />
           <span class="form-hint">必须和必应后台验证过的站点一致</span>
         </el-form-item>
 

@@ -16,7 +16,7 @@
  */
 const crypto = require('crypto');
 const axios = require('axios');
-const db = require('../database.cjs');
+const { query } = require('../database.cjs');
 const { SITE_ORIGIN } = require('./share-cards.cjs');
 const { encrypt, decrypt } = require('./secret.cjs');
 const { pushLiveLog } = require('./live-log.cjs');
@@ -73,67 +73,66 @@ const toBool = (value, fallback) => {
  * 返回的 plainBingKey 是明文，仅供服务端出站请求使用，对外须用 maskKey 脱敏。
  * bing_api_key 解密失败（如更换过 ENV_SECRET_KEY）时按未配置处理。
  */
-const loadConfig = () =>
-  new Promise((resolve) => {
-    db.all(`SELECT key, value FROM system_settings WHERE key LIKE '${SETTING_PREFIX}%'`, [], (err, rows) => {
-      const raw = {};
-      for (const row of err ? [] : rows || []) {
-        raw[String(row.key).slice(SETTING_PREFIX.length)] = row.value;
-      }
+const loadConfig = async (deps = {}) => {
+  const sql = deps.query || query;
+  const { rows } = await sql('SELECT key, value FROM system_settings WHERE key LIKE $1', [`${SETTING_PREFIX}%`]);
+  const raw = {};
+  for (const row of rows) raw[String(row.key).slice(SETTING_PREFIX.length)] = row.value;
 
-      const config = { ...DEFAULT_CONFIG };
-      config.siteUrl = String(raw.siteUrl || DEFAULT_CONFIG.siteUrl || SITE_ORIGIN).replace(/\/+$/, '');
-      for (const key of BOOL_KEYS) config[key] = toBool(raw[key], DEFAULT_CONFIG[key]);
-      for (const [key, range] of Object.entries(NUM_RANGES)) {
-        config[key] = clampNumber(raw[key], range, DEFAULT_CONFIG[key]);
-      }
+  const config = { ...DEFAULT_CONFIG };
+  config.siteUrl = String(raw.siteUrl || DEFAULT_CONFIG.siteUrl || SITE_ORIGIN).replace(/\/+$/, '');
+  for (const key of BOOL_KEYS) config[key] = toBool(raw[key], DEFAULT_CONFIG[key]);
+  for (const [key, range] of Object.entries(NUM_RANGES)) {
+    config[key] = clampNumber(raw[key], range, DEFAULT_CONFIG[key]);
+  }
 
-      // IndexNow key 由 database.cjs 首次启动时生成；此处兜底处理库被清空的情况
-      config.indexNowKey = String(raw.indexnow_key || '').trim();
-      if (!/^[a-zA-Z0-9-]{8,128}$/.test(config.indexNowKey)) {
-        config.indexNowKey = crypto.randomBytes(16).toString('hex');
-        saveSettings({ indexnow_key: config.indexNowKey }).catch(() => {});
-      }
-
-      config.bingKeyMasked = maskKey(decrypt(String(raw.bing_api_key || '')));
-      config.plainBingKey = decrypt(String(raw.bing_api_key || ''));
-      resolve(config);
-    });
-  });
+  config.indexNowKey = String(raw.indexnow_key || '').trim();
+  if (!/^[a-zA-Z0-9-]{8,128}$/.test(config.indexNowKey)) {
+    // Concurrent invocations must all use the same durable key.
+    const generated = crypto.randomBytes(16).toString('hex');
+    const result = await sql(
+      `INSERT INTO system_settings (key, value, updated_at)
+       VALUES ('seo_indexnow_key', $1, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET
+         value = CASE WHEN system_settings.value ~ '^[a-zA-Z0-9-]{8,128}$'
+                      THEN system_settings.value ELSE excluded.value END,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING value`,
+      [generated]
+    );
+    config.indexNowKey = result.rows[0].value;
+  }
+  config.plainBingKey = decrypt(String(raw.bing_api_key || ''));
+  config.bingKeyMasked = maskKey(config.plainBingKey);
+  return config;
+};
 
 /**
  * 批量写入配置。
  * bing_api_key 加密后存储，传空串表示清除；其余键原样存字符串。
  * @returns {Promise<{updated: number, error?: string}>}
  */
-const saveSettings = (patch = {}) =>
-  new Promise((resolve) => {
-    const entries = Object.entries(patch);
-    if (!entries.length) return resolve({ updated: 0 });
-
-    let settled = 0;
-    let failed = null;
-    const done = () => {
-      settled += 1;
-      if (settled < entries.length) return;
-      if (failed) resolve({ updated: 0, error: failed.message });
-      else resolve({ updated: entries.length });
-    };
-
-    entries.forEach(([key, value]) => {
-      const shouldEncrypt = key === 'bing_api_key';
-      const stored = shouldEncrypt ? (value ? encrypt(String(value)) : '') : String(value ?? '');
-      db.run(
-        `INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`,
-        [`${SETTING_PREFIX}${key}`, stored],
-        (err) => {
-          if (err && !failed) failed = err;
-          done();
-        }
-      );
-    });
+const saveSettings = async (patch = {}, deps = {}) => {
+  const entries = Object.entries(patch);
+  if (!entries.length) return { updated: 0 };
+  const values = [];
+  const placeholders = entries.map(([key, value], index) => {
+    const stored = key === 'bing_api_key' ? (value ? encrypt(String(value)) : '') : String(value ?? '');
+    values.push(`${SETTING_PREFIX}${key}`, stored);
+    return `($${index * 2 + 1}, $${index * 2 + 2}, CURRENT_TIMESTAMP)`;
   });
+  try {
+    // One statement makes the entire settings patch atomic.
+    await (deps.query || query)(
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ${placeholders.join(',')}
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      values
+    );
+    return { updated: entries.length };
+  } catch (error) {
+    return { updated: 0, error: error.message };
+  }
+};
 
 /** 只保留末 4 位，用于界面回显与日志 */
 function maskKey(plain) {
@@ -186,12 +185,11 @@ const isTimestampValue = (value) => /^\d{10,}$/.test(String(value || ''));
 const isJunkParam = (key, value) =>
   JUNK_PARAM_EXACT.has(key) || JUNK_PARAM_RE.some((re) => re.test(key)) || isTimestampValue(value);
 
-/** 不应被收录的路径：后台、接口、上传与静态资源、无索引价值的页面 */
+/** 不应被收录的路径：后台、接口、静态资源、无索引价值的页面 */
 const isExcludedPath = (pathname) => {
   const p = pathname.toLowerCase();
   if (p.startsWith('/admin')) return true;
   if (p.startsWith('/api')) return true;
-  if (p.startsWith('/uploads')) return true;
   if (p.startsWith('/assets')) return true;
   if (p === '/login') return true;
   // 已下线的页面不应继续从历史访客路径提交收录
@@ -261,31 +259,26 @@ function normalizeUrl(rawPath, siteUrl) {
 
 /**
  * 将访问路径写入提交队列。同一条归一化 URL 累加 hits 并刷新 last_seen。
- * 由 /api/public/track 调用，失败时不抛异常、不影响请求流程。
+ * 返回完整写入的 Promise，调用方通过 defer() 延长请求结束后的执行时间。
  *
  * @param {string} rawPath 原始路径
  * @param {string} [siteUrl] 站点 origin，省略则取 SITE_ORIGIN
  */
-function enqueuePath(rawPath, siteUrl) {
-  try {
-    const origin = String(siteUrl || SITE_ORIGIN || '').replace(/\/+$/, '');
-    const url = normalizeUrl(rawPath, origin);
-    if (!url) return;
+async function enqueuePath(rawPath, siteUrl, deps = {}) {
+  const origin = String(siteUrl || SITE_ORIGIN || '').replace(/\/+$/, '');
+  const url = normalizeUrl(rawPath, origin);
+  if (!url) return;
 
-    db.run(
-      `INSERT INTO seo_url_queue (path, normalized_url, dedupe_key, hits, first_seen, last_seen, submit_status, updated_at)
-       VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pending', CURRENT_TIMESTAMP)
-       ON CONFLICT(dedupe_key) DO UPDATE SET
-         hits = hits + 1,
-         last_seen = CURRENT_TIMESTAMP,
-         updated_at = CURRENT_TIMESTAMP,
-         normalized_url = excluded.normalized_url`,
-      [String(rawPath).slice(0, 500), url, url],
-      () => {}
-    );
-  } catch {
-    /* 入队失败不影响请求 */
-  }
+  await (deps.query || query)(
+    `INSERT INTO seo_url_queue (path, normalized_url, dedupe_key, hits, first_seen, last_seen, submit_status, updated_at)
+     VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pending', CURRENT_TIMESTAMP)
+     ON CONFLICT(dedupe_key) DO UPDATE SET
+       hits = seo_url_queue.hits + 1,
+       last_seen = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP,
+       normalized_url = excluded.normalized_url`,
+    [String(rawPath).slice(0, 500), url, url]
+  );
 }
 
 /* ========================== 提交通道 ========================== */
@@ -454,10 +447,10 @@ async function fetchBingQuota(config, deps) {
 /* ========================== 取待提交 URL ========================== */
 
 /** 北京时间当天 00:00 对应的 UTC 时刻 */
-const CN_DAY_START_SQL = "datetime('now', '+8 hours', 'start of day', '-8 hours')";
+const CN_DAY_START_SQL = "(date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')";
 
 /** 取数窗口：最近 48 小时内有访问的 URL */
-const SUBMIT_WINDOW_SQL = "datetime('now', '-48 hours')";
+const SUBMIT_WINDOW_SQL = "CURRENT_TIMESTAMP - INTERVAL '48 hours'";
 
 /**
  * 取出本轮待提交的 URL。
@@ -467,128 +460,112 @@ const SUBMIT_WINDOW_SQL = "datetime('now', '-48 hours')";
  *
  * @returns {Promise<Array<{id: number, path: string, url: string, hits: number}>>}
  */
-const selectPending = (config, limit) =>
-  new Promise((resolve) => {
-    const sql = `
-      SELECT id, path, normalized_url, hits,
-             COALESCE((
-               SELECT COUNT(*) FROM seo_submissions s
-                WHERE s.url = q.normalized_url
-                  AND s.status != 'success'
-                  AND s.created_at > datetime('now', '-4 days')
-             ), 0) AS attempts,
-             COALESCE((
-               SELECT COUNT(*) FROM seo_submissions s
-                WHERE s.url = q.normalized_url
-                  AND s.status = 'success'
-                  AND s.created_at > datetime('now', '-4 days')
-             ), 0) AS recent_success
-        FROM seo_url_queue q
-       WHERE q.dedupe_key IS NOT NULL
-         AND q.dedupe_key != ''
-         AND q.last_seen >= ${SUBMIT_WINDOW_SQL}
-         AND q.hits >= ?
-       ORDER BY q.last_seen DESC
-       LIMIT ?`;
-
-    // 放宽行数，去重后仍要凑够 limit
-    db.all(sql, [config.minHits, Math.max(limit * 3, 300)], (err, rows) => {
-      if (err || !rows) return resolve([]);
-
-      const seen = new Set();
-      const picked = [];
-      for (const row of rows) {
-        const url = row.normalized_url;
-        if (!url || seen.has(url)) continue;
-        if (Number(row.recent_success) > 0) continue;
-        if (Number(row.attempts) >= 5) continue;
-        seen.add(url);
-        picked.push({ id: row.id, path: row.path, url, hits: Number(row.hits) || 0 });
-        if (picked.length >= limit) break;
-      }
-      resolve(picked);
-    });
-  });
+const selectPending = async (config, limit, deps = {}) => {
+  const { rows } = await (deps.query || query)(
+    `SELECT id, path, normalized_url, hits
+       FROM seo_url_queue q
+      WHERE q.dedupe_key IS NOT NULL AND q.dedupe_key != ''
+        AND q.last_seen >= ${SUBMIT_WINDOW_SQL}
+        AND q.hits >= $1
+        AND NOT EXISTS (
+          SELECT 1 FROM seo_submissions s WHERE s.url = q.normalized_url
+            AND s.status = 'success' AND s.created_at > CURRENT_TIMESTAMP - INTERVAL '4 days'
+        )
+        AND (SELECT COUNT(*) FROM seo_submissions s WHERE s.url = q.normalized_url
+               AND s.status != 'success' AND s.created_at > CURRENT_TIMESTAMP - INTERVAL '4 days') < 5
+      ORDER BY q.last_seen DESC LIMIT $2`,
+    [config.minHits, Math.max(limit * 3, 300)]
+  );
+  const seen = new Set();
+  const picked = [];
+  for (const row of rows) {
+    const url = normalizeUrl(row.normalized_url, config.siteUrl);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    picked.push({ id: row.id, path: row.path, url, hits: Number(row.hits) || 0 });
+    if (picked.length >= limit) break;
+  }
+  return picked;
+};
 
 /** 今日成功提交的 URL 条数（按北京时间自然日） */
-const countSubmittedToday = () =>
-  new Promise((resolve) => {
-    db.get(
-      `SELECT COUNT(DISTINCT url) AS n FROM seo_submissions
-        WHERE status = 'success' AND created_at >= ${CN_DAY_START_SQL}`,
-      [],
-      (err, row) => resolve(Number(err ? 0 : row?.n) || 0)
-    );
-  });
+const countSubmittedToday = async (deps = {}) => {
+  const { rows } = await (deps.query || query)(
+    `SELECT COUNT(DISTINCT url)::int AS n FROM seo_submissions
+      WHERE status = 'success' AND created_at >= ${CN_DAY_START_SQL}`
+  );
+  return Number(rows[0]?.n) || 0;
+};
 
 /** 待提交条数，筛选条件与 selectPending 一致 */
-const countPending = (config) =>
-  new Promise((resolve) => {
-    const minHits = Math.max(1, Number(config?.minHits) || 1);
-    db.get(
-      `SELECT COUNT(DISTINCT q.normalized_url) AS n
-         FROM seo_url_queue q
-        WHERE q.dedupe_key IS NOT NULL
-          AND q.dedupe_key != ''
-          AND q.last_seen >= ${SUBMIT_WINDOW_SQL}
-          AND q.hits >= ?
-          AND COALESCE((
-                SELECT COUNT(*) FROM seo_submissions s
-                 WHERE s.url = q.normalized_url
-                   AND s.status = 'success'
-                   AND s.created_at > datetime('now', '-4 days')
-              ), 0) = 0
-          AND COALESCE((
-                SELECT COUNT(*) FROM seo_submissions s
-                 WHERE s.url = q.normalized_url
-                   AND s.status != 'success'
-                   AND s.created_at > datetime('now', '-4 days')
-              ), 0) < 5`,
-      [minHits],
-      (err, row) => resolve(Number(err ? 0 : row?.n) || 0)
-    );
-  });
+const countPending = async (config) => {
+  const { rows } = await query(
+    `SELECT COUNT(DISTINCT q.normalized_url)::int AS n FROM seo_url_queue q
+      WHERE q.dedupe_key IS NOT NULL AND q.dedupe_key != ''
+        AND q.last_seen >= ${SUBMIT_WINDOW_SQL}
+        AND q.hits >= $1
+        AND NOT EXISTS (
+          SELECT 1 FROM seo_submissions s WHERE s.url = q.normalized_url
+            AND s.status = 'success' AND s.created_at > CURRENT_TIMESTAMP - INTERVAL '4 days'
+        )
+        AND (SELECT COUNT(*) FROM seo_submissions s WHERE s.url = q.normalized_url
+               AND s.status != 'success' AND s.created_at > CURRENT_TIMESTAMP - INTERVAL '4 days') < 5`,
+    [Math.max(1, Number(config?.minHits) || 1)]
+  );
+  return Number(rows[0]?.n) || 0;
+};
 
-/** 记录一条提交结果 */
-const recordSubmission = (entry) =>
-  new Promise((resolve) => {
-    db.run(
-      `INSERT INTO seo_submissions
-         (url, queue_id, channel, status, http_status, message, batch_size, key_masked)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [
-        entry.url,
-        entry.queueId || null,
-        entry.channel || '',
-        entry.status || 'unknown',
-        Number.isFinite(entry.httpStatus) ? entry.httpStatus : null,
-        redact(entry.message || ''),
-        entry.batchSize || null,
-        entry.keyMasked || ''
-      ],
-      () => resolve()
-    );
-  });
-
-/** 将队列条目标记为已提交 */
-const markSubmitted = (ids) =>
-  new Promise((resolve) => {
-    const list = (ids || []).filter((id) => Number.isFinite(Number(id)));
-    if (!list.length) return resolve();
-    const placeholders = list.map(() => '?').join(',');
-    db.run(
-      `UPDATE seo_url_queue
-          SET submit_status = 'submitted', updated_at = CURRENT_TIMESTAMP
-        WHERE id IN (${placeholders})`,
-      list,
-      () => resolve()
-    );
-  });
+/** Persist the entire batch and its queue state in one atomic statement. */
+const recordBatch = async (batch, result, channel, config, deps) => {
+  const status = result.ok ? 'success' : result.status === 'skipped' ? 'skipped' : 'failed';
+  await (deps.query || query)(
+    `WITH recorded AS (
+       INSERT INTO seo_submissions (url, queue_id, channel, status, http_status, message, batch_size, key_masked)
+       SELECT item.url, item.id, $2, $3, $4, $5, $6, $7
+         FROM jsonb_to_recordset($1::jsonb) AS item(id integer, url text)
+       RETURNING queue_id
+     )
+     UPDATE seo_url_queue SET submit_status = 'submitted', updated_at = CURRENT_TIMESTAMP
+      WHERE $3 = 'success' AND id IN (SELECT queue_id FROM recorded)`,
+    [
+      JSON.stringify(batch.map(({ id, url }) => ({ id, url }))),
+      channel, status, Number.isFinite(result.httpStatus) ? result.httpStatus : null,
+      redact(result.message || ''), batch.length,
+      channel === 'bing' ? config.bingKeyMasked : maskKey(config.indexNowKey)
+    ]
+  );
+};
 
 /* ========================== 提交主流程 ========================== */
 
-// 串行锁：定时任务与手动提交可能同时触发，重叠会造成重复提交
-let running = false;
+// A renewable database lease serializes manual and Cron invocations across isolates.
+const RUN_LOCK_KEY = `${SETTING_PREFIX}submission_lock`;
+const LOCK_ACTIVE_SQL = "updated_at > CURRENT_TIMESTAMP - INTERVAL '5 minutes'";
+
+const acquireRunLock = async (token, sql) => {
+  const result = await sql(
+    `INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+       WHERE system_settings.updated_at <= CURRENT_TIMESTAMP - INTERVAL '5 minutes'
+     RETURNING value`,
+    [RUN_LOCK_KEY, token]
+  );
+  return result.rowCount > 0;
+};
+
+const renewRunLock = async (token, sql) => {
+  const result = await sql(
+    `UPDATE system_settings SET updated_at = CURRENT_TIMESTAMP
+      WHERE key = $1 AND value = $2 AND ${LOCK_ACTIVE_SQL} RETURNING value`,
+    [RUN_LOCK_KEY, token]
+  );
+  if (!result.rowCount) throw new Error('提交锁已过期，本轮已停止');
+};
+
+const isRunning = async () => {
+  const { rows } = await query(`SELECT 1 FROM system_settings WHERE key = $1 AND ${LOCK_ACTIVE_SQL}`, [RUN_LOCK_KEY]);
+  return rows.length > 0;
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
@@ -605,10 +582,11 @@ async function runSubmission(options = {}) {
   const deps = options.deps || {};
   const source = options.source || 'manual';
 
-  if (running) {
-    return { skipped: true, reason: '上一轮提交尚未结束' };
+  const sql = deps.query || query;
+  const token = crypto.randomBytes(16).toString('hex');
+  if (!(await acquireRunLock(token, sql))) {
+    return { skipped: true, busy: true, reason: '上一轮提交尚未结束' };
   }
-  running = true;
 
   const startedAt = Date.now();
   const summary = {
@@ -626,7 +604,10 @@ async function runSubmission(options = {}) {
   };
 
   try {
-    const config = await loadConfig();
+    if (options.dailyDay && !(await claimRunDay(options.dailyDay, sql))) {
+      return { skipped: true, reason: '今天已经执行过或已有更新的调度', day: options.dailyDay };
+    }
+    const config = options.config || await loadConfig(deps);
     summary.siteUrl = config.siteUrl;
 
     if (!config.enabled) {
@@ -645,7 +626,7 @@ async function runSubmission(options = {}) {
 
     // 额度取「本轮上限」与「今日剩余」中的较小值
     const limit = Math.max(1, Math.floor(Number(options.limit) || config.dailyLimit));
-    const submittedToday = await countSubmittedToday();
+    const submittedToday = await countSubmittedToday(deps);
     let budget = Math.min(limit, Math.max(0, config.dailyLimit - submittedToday));
 
     if (budget <= 0) {
@@ -669,7 +650,7 @@ async function runSubmission(options = {}) {
       }
     }
 
-    const pending = await selectPending(config, budget);
+    const pending = await selectPending(config, budget, deps);
     summary.queued = pending.length;
     if (!pending.length) {
       summary.skipped = true;
@@ -680,6 +661,7 @@ async function runSubmission(options = {}) {
     const batchSize = Math.min(config.batchSize, BING_BATCH_MAX);
 
     for (let offset = 0; offset < pending.length; offset += batchSize) {
+      await renewRunLock(token, sql);
       const batch = pending.slice(offset, offset + batchSize);
       const urls = batch.map((item) => item.url);
       let result = null;
@@ -720,21 +702,8 @@ async function runSubmission(options = {}) {
         size: urls.length
       });
 
-      const status = result.ok ? 'success' : result.status === 'skipped' ? 'skipped' : 'failed';
-      for (const item of batch) {
-        await recordSubmission({
-          url: item.url,
-          queueId: item.id,
-          channel,
-          status,
-          httpStatus: result.httpStatus,
-          message: result.message,
-          batchSize: urls.length,
-          keyMasked: channel === 'bing' ? config.bingKeyMasked : maskKey(config.indexNowKey)
-        });
-      }
-
-      if (result.ok) await markSubmitted(batch.map((item) => item.id));
+      await renewRunLock(token, sql);
+      await recordBatch(batch, result, channel, config, deps);
 
       // 不可重试的错误继续跑只会刷满失败计数，直接结束本轮
       if (!result.ok && !result.retryable) {
@@ -762,108 +731,76 @@ async function runSubmission(options = {}) {
     pushLiveLog('error', `[seo] 提交异常：${summary.error}`, { kind: 'seo', source });
     return summary;
   } finally {
-    running = false;
+    await sql('DELETE FROM system_settings WHERE key = $1 AND value = $2', [RUN_LOCK_KEY, token]);
   }
 }
 
 /* ========================== 定时任务 ========================== */
 
-let timer = null;
-/** 已执行自动提交的北京日期（YYYY-MM-DD） */
-let lastRunDay = '';
-
-/** 取北京时间的日期与小时 */
-const beijingNow = () => {
-  const shifted = new Date(Date.now() + 8 * 3600 * 1000);
+/** Controller timestamps, not isolate lifetime, determine the Beijing schedule. */
+const beijingTime = (timestamp) => {
+  const shifted = new Date(timestamp + 8 * 3600 * 1000);
   return { day: shifted.toISOString().slice(0, 10), hour: shifted.getUTCHours() };
 };
 
-const readLastRunDay = () =>
-  new Promise((resolve) => {
-    db.get(`SELECT value FROM system_settings WHERE key = '${SETTING_PREFIX}last_run_day'`, [], (err, row) => {
-      resolve(String(err ? '' : row?.value || ''));
-    });
-  });
+const readLastRunDay = async (sql = query) => {
+  const { rows } = await sql('SELECT value FROM system_settings WHERE key = $1', [`${SETTING_PREFIX}last_run_day`]);
+  return String(rows[0]?.value || '');
+};
 
-const writeLastRunDay = (day) => {
-  db.run(
-    `INSERT INTO system_settings (key, value, updated_at) VALUES ('${SETTING_PREFIX}last_run_day', ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`,
-    [String(day)],
-    () => {}
+// ISO dates sort chronologically. Never let a duplicate or late tick move the claim backwards.
+const claimRunDay = async (day, sql) => {
+  const result = await sql(
+    `INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+       WHERE COALESCE(system_settings.value, '') < excluded.value
+     RETURNING value`,
+    [`${SETTING_PREFIX}last_run_day`, day]
   );
+  return result.rowCount > 0;
 };
 
 /**
- * 判断此刻是否应执行当日提交：已到 submitHour 且该北京日期尚未执行。
- * 进程在 submitHour 未运行时，起来后当天会补跑。
- * @returns {Promise<{due: boolean, day: string, reason?: string}>}
+ * Cloudflare scheduled() invokes and awaits this function. The durable day claim is
+ * made before outbound submission, and is retained even when a channel fails.
+ * A delayed event from an earlier Beijing day must not submit today's queue.
  */
-const isDailyRunDue = async (config) => {
-  const { day, hour } = beijingNow();
-  if (!lastRunDay) lastRunDay = await readLastRunDay();
-  if (lastRunDay === day) return { due: false, day, reason: '今天已经执行过' };
-  if (hour < config.submitHour) {
-    return { due: false, day, reason: `未到 ${String(config.submitHour).padStart(2, '0')}:00` };
+async function runDailyTick({ scheduledTime = Date.now(), deps = {} } = {}) {
+  const now = deps.now ? deps.now() : Date.now();
+  const timestamp = Number(scheduledTime);
+  if (!Number.isFinite(timestamp) || !Number.isFinite(new Date(timestamp).getTime())) {
+    return { skipped: true, reason: '无效的调度时间' };
   }
-  return { due: true, day };
-};
-
-/**
- * 定时任务的一次心跳：到点且当日未执行则提交。
- * 先记录当日已执行再提交，避免提交过程中抛错导致 60 秒后重复触发。
- *
- * @param {object} [options] deps 透传给 runSubmission
- */
-async function runDailyTick({ deps } = {}) {
-  const config = await loadConfig();
+  const shiftedTimestamp = timestamp + 8 * 3600 * 1000;
+  if (!Number.isFinite(new Date(shiftedTimestamp).getTime())) {
+    return { skipped: true, reason: '无效的调度时间' };
+  }
+  const { day, hour } = beijingTime(timestamp);
+  if (day !== beijingTime(now).day || timestamp > now) {
+    return { skipped: true, reason: '调度事件已过期或尚未到期', day };
+  }
+  const config = await loadConfig(deps);
   if (!config.enabled || !config.autoSubmit) {
-    return { skipped: true, reason: config.enabled ? '自动提交已关闭' : '功能总开关已关闭' };
+    return { skipped: true, reason: config.enabled ? '自动提交已关闭' : '功能总开关已关闭', day };
+  }
+  if (hour < config.submitHour) {
+    return { skipped: true, reason: `未到 ${String(config.submitHour).padStart(2, '0')}:00`, day };
   }
 
-  const { due, day, reason } = await isDailyRunDue(config);
-  if (!due) return { skipped: true, reason, day };
-
-  lastRunDay = day;
-  writeLastRunDay(day);
-
-  const summary = await runSubmission({ source: 'scheduler', deps });
+  const summary = await runSubmission({ source: 'scheduler', dailyDay: day, config, deps });
   pushLiveLog(
     'info',
-    `[seo] ${day} 定时提交：成功 ${summary.succeeded} / 尝试 ${summary.attempted}${summary.reason ? `（${summary.reason}）` : ''}`,
+    `[seo] ${day} 定时提交：成功 ${summary.succeeded || 0} / 尝试 ${summary.attempted || 0}${summary.reason ? `（${summary.reason}）` : ''}`,
     { kind: 'seo', source: 'scheduler', day }
   );
   return { ...summary, day };
 }
 
-/**
- * 启动定时任务：每 tickMs 检查一次是否到点，改配置无需重启进程。
- * @returns {NodeJS.Timeout}
- */
-function startScheduler({ tickMs = 60000 } = {}) {
-  if (timer) return timer;
-
-  readLastRunDay().then((day) => {
-    lastRunDay = day;
-  });
-
-  timer = setInterval(async () => {
-    try {
-      await runDailyTick();
-    } catch (error) {
-      pushLiveLog('error', `[seo] 定时任务异常：${redact(error?.message || error)}`, { kind: 'seo' });
-    }
-  }, tickMs);
-
-  if (timer.unref) timer.unref();
-  return timer;
-}
-
 /** 供后台面板展示的执行状态 */
 const schedulerState = async (config) => {
-  const { day, hour } = beijingNow();
-  const runDay = lastRunDay || (await readLastRunDay());
-  const nextDay = runDay === day && hour >= config.submitHour ? '明天' : '今天';
+  const { day, hour } = beijingTime(Date.now());
+  const runDay = await readLastRunDay();
+  const nextDay = runDay >= day ? '明天' : '今天';
   return {
     lastRunDay: runDay || null,
     ranToday: runDay === day,
@@ -887,7 +824,6 @@ module.exports = {
   fetchBingQuota,
   runSubmission,
   runDailyTick,
-  startScheduler,
   schedulerState,
-  isRunning: () => running
+  isRunning
 };

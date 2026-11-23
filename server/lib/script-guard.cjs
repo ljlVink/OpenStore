@@ -8,12 +8,12 @@
  *      否则误拦自己的出口就进不去后台解封（与硬封禁共用同一份豁免）。
  * 豁免：官方搜索/社交抓取 UA 与 SEO 元文件（robots.txt 等）放行，不影响收录与分享卡片。
  * 另有硬封禁名单（不区分 UA，见 hardBanGuard）与可后台自定义的警告页文案。
- * 后台「接口体检」「请求重放」带专用 header，直接放行。
  */
 const UAParser = require('ua-parser-js');
-const geoip = require('geoip-lite');
-const db = require('../database.cjs');
-const { getClientIp, normalizeIp } = require('./client-ip.cjs');
+const { isIP } = require('node:net');
+const { query } = require('../database.cjs');
+const { bindings } = require('./runtime.cjs');
+const { getClientIp, getClientLocation, normalizeIp } = require('./client-ip.cjs');
 const { pushLiveLog } = require('./live-log.cjs');
 const { compilePatterns, normalizeAllowUa, makeIsAllowedClient } = require('./ua-allowlist.cjs');
 const { SITE_ORIGIN, SITE_NAME } = require('./share-cards.cjs');
@@ -25,80 +25,42 @@ const readInt = (value, fallback) => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-// SCRIPT_GUARD_ENABLED=0 可以整体关掉（排查误伤时用）
-const GUARD_ENABLED = !/^(0|false|off)$/i.test(String(process.env.SCRIPT_GUARD_ENABLED ?? '1').trim());
-// 窗口内允许多少次「非浏览器」请求；设 0 = 一发现就弹警告页
-const FREE_HITS = readInt(process.env.SCRIPT_GUARD_FREE_HITS, 20);
-const WINDOW_MS = readInt(process.env.SCRIPT_GUARD_WINDOW_MS, 10 * 60 * 1000);
-const BASE_BLOCK_MS = readInt(process.env.SCRIPT_GUARD_BLOCK_MS, 15 * 60 * 1000);
+const guardOptions = () => {
+  const env = bindings();
+  return {
+    enabled: !/^(0|false|off)$/i.test(String(env.SCRIPT_GUARD_ENABLED ?? '1').trim()),
+    freeHits: Math.floor(readInt(env.SCRIPT_GUARD_FREE_HITS, 20)),
+    windowMs: Math.floor(readInt(env.SCRIPT_GUARD_WINDOW_MS, 10 * 60 * 1000)),
+    baseBlockMs: Math.floor(readInt(env.SCRIPT_GUARD_BLOCK_MS, 15 * 60 * 1000))
+  };
+};
 const MAX_BLOCK_MS = 24 * 60 * 60 * 1000;
-// 警告页默认的申诉/合作入口（后台改过之后以数据库里的为准）
-const CONTACT_URL = String(process.env.SCRIPT_GUARD_CONTACT || '').trim() || `${SITE_ORIGIN}/about`;
+const CONTACT_URL = `${SITE_ORIGIN}/about`;
 
 /* --------------------------- 放行名单 --------------------------- */
 
 /* 放行名单：命中的客户端不计次、不封禁（硬封禁只看 IP，不受影响）。
    只存 system_settings，没有内置默认值，未保存前为空 = 不放行任何客户端。 */
 const ALLOW_KEY = 'script_guard_allow';
-// 与警告页配置同样的兜底 TTL：后台保存立刻生效，这个只用于多实例/外部改库
-const ALLOW_TTL_MS = 5 * 60 * 1000;
-
-let allowUa = '';
-let allowUaAt = 0;
-/* 匹配函数持有的是这个数组本身：更新时原地改，不要重新赋值 */
-const allowPatterns = compilePatterns('');
-const isAllowedClient = makeIsAllowedClient(allowPatterns);
-
-const applyAllowUa = (value) => {
-  allowUa = value;
-  allowPatterns.length = 0;
-  allowPatterns.push(...compilePatterns(value));
-  allowUaAt = Date.now();
+const getAllowList = async () => {
+  const { rows } = await query('SELECT value FROM system_settings WHERE key = $1', [ALLOW_KEY]);
+  return normalizeAllowUa(rows[0]?.value || '');
 };
 
-const loadAllowList = (cb) => {
-  db.get(`SELECT value FROM system_settings WHERE key = ?`, [ALLOW_KEY], (err, row) => {
-    if (!err) {
-      allowUaAt = Date.now();
-      applyAllowUa(normalizeAllowUa(row ? row.value : ''));
-    }
-    if (cb) cb(err || null);
-  });
-};
-
-/** 同步取当前名单（热路径用）：过期时后台异步刷新，本次先用缓存 */
-const getAllowList = () => {
-  if (Date.now() - allowUaAt > ALLOW_TTL_MS) {
-    allowUaAt = Date.now(); // 先占位，避免并发请求打出一堆同样的查询
-    loadAllowList();
-  }
-  return allowUa;
-};
-
-const saveAllowList = (input, cb) => {
+const saveAllowList = async (input) => {
   const value = normalizeAllowUa(input);
-  db.run(
-    `INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+  await query(
+    `INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
-    [ALLOW_KEY, value],
-    (err) => {
-      if (!err) applyAllowUa(value);
-      if (cb) cb(err || null, value);
-    }
-  );
+    [ALLOW_KEY, value]);
+  return value;
 };
-
-/* ------------------------------- 状态 ------------------------------- */
-
-// ip -> { hits: number[], strikes: number, blockedUntil: number, ua: string }
-const state = new Map();
-const stats = { scriptRequests: 0, warned: 0, blocked: 0, strikes: 0 };
 
 /** UA 解析不出浏览器名就认为是脚本；放行名单里的客户端不参与判定 */
-const looksLikeScript = (ua) => {
+const looksLikeScript = (ua, allow = '') => {
   const raw = String(ua || '').trim();
   if (!raw) return true;
-  if (isAllowedClient(raw)) return false;
+  if (makeIsAllowedClient(compilePatterns(allow))(raw)) return false;
   try {
     const browser = new UAParser(raw).getBrowser();
     return !browser || !browser.name;
@@ -110,8 +72,6 @@ const looksLikeScript = (ua) => {
 /* --------------------------- 警告页自定义 --------------------------- */
 
 const PAGE_CONFIG_KEY = 'script_guard_page';
-// 内存缓存时长：后台保存时会立刻失效，这个 TTL 只是多实例/外部改库时的兜底
-const PAGE_CONFIG_TTL_MS = 5 * 60 * 1000;
 
 /**
  * 默认文案。支持两条迷你标记（见 renderInline）：`**加粗**`、`{{site}}`。
@@ -164,107 +124,44 @@ const normalizePageConfig = (raw) => {
   };
 };
 
-let pageConfig = normalizePageConfig(DEFAULT_PAGE_CONFIG);
-let pageConfigAt = 0;
-
-/** 从库里读一次；读不到/坏了就用默认值，绝不因为配置问题让警告页变成 500 */
-const loadPageConfig = (cb) => {
-  db.get(`SELECT value FROM system_settings WHERE key = ?`, [PAGE_CONFIG_KEY], (err, row) => {
-    if (!err) {
-      pageConfigAt = Date.now();
-      if (row && row.value) {
-        try {
-          pageConfig = normalizePageConfig(JSON.parse(row.value));
-        } catch {
-          pageConfig = normalizePageConfig(DEFAULT_PAGE_CONFIG);
-        }
-      } else {
-        pageConfig = normalizePageConfig(DEFAULT_PAGE_CONFIG);
-      }
-    }
-    if (cb) cb(err || null, pageConfig);
-  });
-};
-
-/** 同步取当前配置（渲染警告页时调用）。过期时后台异步刷新，本次先用缓存。 */
-const getPageConfig = () => {
-  if (Date.now() - pageConfigAt > PAGE_CONFIG_TTL_MS) {
-    pageConfigAt = Date.now(); // 先占位，避免并发请求打出一堆同样的查询
-    loadPageConfig();
+// Read on every request: a save or ban in one isolate is effective in all others.
+const getPageConfig = async () => {
+  const { rows } = await query('SELECT value FROM system_settings WHERE key = $1', [PAGE_CONFIG_KEY]);
+  const defaults = { ...DEFAULT_PAGE_CONFIG, contactUrl: String(bindings().SCRIPT_GUARD_CONTACT || '').trim() || CONTACT_URL };
+  try {
+    return normalizePageConfig(rows[0]?.value ? JSON.parse(rows[0].value) : defaults);
+  } catch {
+    return normalizePageConfig(defaults);
   }
-  return pageConfig;
 };
 
-const savePageConfig = (input, cb) => {
+const savePageConfig = async (input) => {
   const config = normalizePageConfig(input);
-  db.run(
-    `INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+  await query(
+    `INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
-    [PAGE_CONFIG_KEY, JSON.stringify(config)],
-    (err) => {
-      if (!err) {
-        pageConfig = config;
-        pageConfigAt = Date.now();
-      }
-      if (cb) cb(err || null, config);
-    }
-  );
+    [PAGE_CONFIG_KEY, JSON.stringify(config)]);
+  return config;
 };
 
-const resetPageConfig = (cb) => {
-  db.run(`DELETE FROM system_settings WHERE key = ?`, [PAGE_CONFIG_KEY], (err) => {
-    if (!err) {
-      pageConfig = normalizePageConfig(DEFAULT_PAGE_CONFIG);
-      pageConfigAt = Date.now();
-    }
-    if (cb) cb(err || null, pageConfig);
-  });
+const resetPageConfig = async () => {
+  await query('DELETE FROM system_settings WHERE key = $1', [PAGE_CONFIG_KEY]);
+  return getPageConfig();
 };
 
-/* --------------------------- 拦截记录 --------------------------- */
-
-// 只保留最近这么多条，避免长期运行无限增长（每次封禁才会写一条，正常攒得很慢）
-const BLOCK_RECORDS_KEEP = 1000;
-
-/** 写一条拦截记录：谁、什么 UA、哪次请求触发的、第几次违规、封了多久 */
-const recordBlock = ({ ip, ua, path, hits, strikes, blockMs }) => {
-  const geo = geoip.lookup(ip);
-  const location = geo ? [geo.city, geo.country].filter(Boolean).join(' ') : '';
-
-  db.run(
-    `INSERT INTO script_guard_blocks (ip, location, ua, path, hits, strikes, block_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [ip, location, String(ua || '').slice(0, 200), String(path || '').slice(0, 300), hits, strikes, blockMs],
-    (err) => {
-      if (err) console.error('[script-guard] 写拦截记录失败:', err.message);
-    }
-  );
-
-  // 顺手裁掉过老的行；表空时 MAX(id) 为 NULL，条件不成立，不会误删
-  db.run(`DELETE FROM script_guard_blocks WHERE id <= (SELECT MAX(id) - ? FROM script_guard_blocks)`, [
-    BLOCK_RECORDS_KEEP
-  ]);
+const listBlockRecords = async (limit) => {
+  const n = Math.floor(Math.min(Math.max(Number(limit) || 100, 1), 500));
+  const { rows } = await query('SELECT * FROM script_guard_blocks ORDER BY id DESC LIMIT $1', [n]);
+  return rows;
 };
 
-const listBlockRecords = (limit, cb) => {
-  const n = Math.min(Math.max(Number(limit) || 100, 1), 500);
-  db.all(`SELECT * FROM script_guard_blocks ORDER BY id DESC LIMIT ?`, [n], (err, rows) => {
-    cb(err || null, rows || []);
-  });
+const clearBlockRecords = async () => {
+  await query('DELETE FROM script_guard_blocks');
 };
 
-const clearBlockRecords = (cb) => {
-  db.run(`DELETE FROM script_guard_blocks`, [], (err) => {
-    if (cb) cb(err || null);
-  });
-};
-
-/** 手动解除某个 IP 的封禁（误伤时用）。只影响内存里的封禁状态，不动已经写下的记录。 */
-const unblockIp = (ip) => {
-  const key = String(ip || '').trim();
-  if (!key || !state.has(key)) return false;
-  state.delete(key);
-  return true;
+const unblockIp = async (ip) => {
+  const result = await query('DELETE FROM script_guard_state WHERE ip = $1 RETURNING ip', [normalizeIp(ip)]);
+  return result.rowCount > 0;
 };
 
 /* ------------------------------ 渲染 ------------------------------ */
@@ -292,8 +189,8 @@ const humanMs = (ms) => {
 };
 
 /** 警告页：纯内联样式，不依赖任何外部资源（对方可能根本不加载外链） */
-const warningPage = ({ ip, ua, path, retryAfterSec, strikes }) => {
-  const cfg = getPageConfig();
+const warningPage = async ({ ip, ua, path, retryAfterSec, strikes }) => {
+  const cfg = await getPageConfig();
 
   const tipsHtml = cfg.tips.length
     ? `    <ul>\n${cfg.tips.map((t) => `      <li>${renderBlock(t)}</li>`).join('\n')}\n    </ul>`
@@ -378,11 +275,11 @@ ${contactHtml}
 </html>`;
 };
 
-const sendWarning = (res, info) => {
+const sendWarning = async (res, info) => {
   res.set('Cache-Control', 'no-store');
   res.set('X-Robots-Tag', 'noindex');
   if (info.retryAfterSec > 0) res.set('Retry-After', String(info.retryAfterSec));
-  res.status(429).type('html').send(warningPage(info));
+  res.status(429).type('html').send(await warningPage(info));
 };
 
 /**
@@ -397,198 +294,75 @@ const previewWarningPage = () =>
     strikes: 1
   });
 
-/* ------------------------------ 封禁 ------------------------------ */
-
-/** 取（或建）某个 IP 的运行态。中间件和后台「一键触发」共用。 */
-const getOrCreateEntry = (ip) => {
-  let entry = state.get(ip);
-  if (!entry) {
-    entry = { hits: [], strikes: 0, blockedUntil: 0, ua: '' };
-    state.set(ip, entry);
+/* The PG function locks one IP row and commits the sliding window, strikes and
+ * block record together; independent Workers never race through a local cache. */
+const trackRequest = async (ip, ua, path, force = false) => {
+  const options = guardOptions();
+  const { rows } = await query('SELECT * FROM script_guard_hit($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [ip, String(ua || '').slice(0, 200), String(path || '').slice(0, 300), getClientLocation(),
+      options.freeHits, options.windowMs, options.baseBlockMs, MAX_BLOCK_MS, force]);
+  const entry = rows[0];
+  if (entry.new_block) {
+    pushLiveLog('warn', `脚本护栏：已限制 ${ip} 请求 ${path} · 封禁 ${humanMs(Number(entry.block_ms))}`, { kind: 'system' });
   }
   return entry;
 };
 
-/** 执行一次封禁：违规次数 +1、算时长、写记录、打日志；blockMs 传了就用它 */
-const applyBlock = (entry, { ip, ua, path, hitsUsed = 0 }) => {
-  entry.strikes += 1;
-  stats.strikes += 1;
-  const blockMs = Math.min(BASE_BLOCK_MS * Math.pow(4, entry.strikes - 1), MAX_BLOCK_MS);
-  entry.blockedUntil = Date.now() + blockMs;
-  entry.hits = [];
-  if (ua) entry.ua = String(ua).slice(0, 200);
-
-  recordBlock({ ip, ua: entry.ua, path, hits: hitsUsed, strikes: entry.strikes, blockMs });
-
-  pushLiveLog(
-    'warn',
-    `脚本护栏：已限制 ${ip}（${entry.ua || '无 UA'}）请求 ${path} · 封禁 ${humanMs(blockMs)}`,
-    { kind: 'system' }
-  );
-
-  return { blockMs, strikes: entry.strikes };
-};
-
-/** 后台「一键触发真实拦截」：对该 IP 真封一次，返回会发给它的 429 页面 */
-const triggerBlock = (ip, { ua, path } = {}) => {
-  const key = String(ip || '').trim();
-  if (!key) return null;
-
-  const entry = getOrCreateEntry(key);
+const triggerBlock = async (ip, { ua, path } = {}) => {
+  const key = normalizeIp(ip);
+  if (!isIP(key)) return null;
   const uaText = String(ua || '').trim() || 'OpenStore-Guard-SelfTest/1.0';
   const pathText = String(path || '').trim() || '/api/public/apps/browse';
-
-  const { blockMs, strikes } = applyBlock(entry, {
-    ip: key,
-    ua: uaText,
-    path: pathText,
-    // 手动触发视作「宽限配额已用满」，这样一次点击就能看到真正的拦截结果
-    hitsUsed: FREE_HITS
-  });
-
+  const entry = await trackRequest(key, uaText, pathText, true);
+  const blockMs = Number(entry.block_ms);
+  const remainMs = Number(entry.remain_ms);
   return {
-    ip: key,
-    status: 429,
-    strikes,
-    blockMs,
-    remainMs: Math.max(0, entry.blockedUntil - Date.now()),
-    html: warningPage({ ip: key, ua: entry.ua, path: pathText, retryAfterSec: Math.ceil(blockMs / 1000), strikes })
+    ip: key, status: 429, strikes: entry.strikes, blockMs, remainMs,
+    html: await warningPage({ ip: key, ua: uaText, path: pathText, retryAfterSec: Math.ceil(remainMs / 1000), strikes: entry.strikes })
   };
 };
 
-/* ---------------------------- 硬封禁名单 ---------------------------- */
-
-/*
- * 硬封禁：不区分 UA，命中后该 IP 的一切请求都返回 429（连浏览器也打不开站点）。
- * 名单持久化在 script_guard_bans，启动载入内存，热路径只查 Map。
- * /api/admin/*、/admin、/ws 例外，否则误封自己的出口 IP 就进不去后台解封。
- * 脚本护栏（scriptGuard）也复用这份豁免，所以提出来定义一个常量。
- */
 const ADMIN_EXEMPT_RE = [/^\/api\/admin(\/|$)/, /^\/admin(\/|$)/, /^\/ws$/];
-const hardBans = new Map(); // ip -> { reason, createdAt, expiresAt(ms, 0=永久), hits }
 
-const toSqlUtc = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
-const parseSqlUtc = (val) => {
-  if (!val) return 0;
-  const ms = Date.parse(String(val).replace(' ', 'T') + 'Z');
-  return Number.isNaN(ms) ? 0 : ms;
-};
-
-/** 从库里载入名单（启动时调一次；过期的顺手丢掉） */
-const loadHardBans = (cb) => {
-  db.all(`SELECT ip, reason, created_at, expires_at FROM script_guard_bans`, [], (err, rows) => {
-    if (err) {
-      if (cb) cb(err);
-      return;
-    }
-    const now = Date.now();
-    hardBans.clear();
-    for (const row of rows || []) {
-      const expiresAt = parseSqlUtc(row.expires_at);
-      if (expiresAt && expiresAt <= now) continue;
-      hardBans.set(normalizeIp(row.ip), {
-        reason: row.reason || '',
-        createdAt: row.created_at || '',
-        expiresAt,
-        hits: 0
-      });
-    }
-    if (cb) cb(null);
-  });
-};
-
-/** 只接受 IP 字面量，避免把任意字符串写进名单/内存键 */
-const isValidIp = (raw) => /^[0-9a-fA-F:.]{3,45}$/.test(String(raw || '').trim());
-
-/** 硬封禁一个 IP：durationMs 为 0 或不传 = 永久 */
-const hardBanIp = (ip, { reason = '', durationMs = 0 } = {}, cb) => {
-  const key = normalizeIp(String(ip || '').trim());
-  if (!key || !isValidIp(key)) {
-    if (cb) cb(new Error('IP 格式不正确'));
-    return;
-  }
-  const expiresAt = Number(durationMs) > 0 ? Date.now() + Number(durationMs) : 0;
+const hardBanIp = async (ip, { reason = '', durationMs = 0 } = {}) => {
+  const key = normalizeIp(ip);
+  if (!isIP(key)) throw new Error('IP 格式不正确');
+  const duration = Number.isFinite(Number(durationMs)) ? Math.max(Number(durationMs), 0) : 0;
   const safeReason = String(reason || '').slice(0, 200);
-
-  db.run(
-    `INSERT INTO script_guard_bans (ip, reason, created_at, expires_at) VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+  await query(
+    `INSERT INTO script_guard_bans (ip, reason, created_at, expires_at)
+     VALUES ($1, $2, CURRENT_TIMESTAMP, CASE WHEN $3::double precision > 0 THEN clock_timestamp() + $3 * interval '1 millisecond' ELSE NULL END)
      ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, created_at = CURRENT_TIMESTAMP, expires_at = excluded.expires_at`,
-    [key, safeReason, expiresAt ? toSqlUtc(expiresAt) : null],
-    (err) => {
-      if (!err) {
-        const prev = hardBans.get(key);
-        hardBans.set(key, { reason: safeReason, createdAt: toSqlUtc(Date.now()), expiresAt, hits: prev?.hits || 0 });
-        pushLiveLog('warn', `脚本护栏：已硬封禁 ${key}${safeReason ? `（${safeReason}）` : ''}`, { kind: 'system' });
-      }
-      if (cb) cb(err || null);
-    }
-  );
+    [key, safeReason, duration]);
+  pushLiveLog('warn', `脚本护栏：已硬封禁 ${key}${safeReason ? `（${safeReason}）` : ''}`, { kind: 'system' });
 };
 
-const hardUnbanIp = (ip, cb) => {
-  const key = normalizeIp(String(ip || '').trim());
-  if (!key) {
-    if (cb) cb(new Error('缺少 IP'));
-    return;
-  }
-  db.run(`DELETE FROM script_guard_bans WHERE ip = ?`, [key], (err) => {
-    if (!err) {
-      hardBans.delete(key);
-      pushLiveLog('info', `脚本护栏：已解除硬封禁 ${key}`, { kind: 'system' });
-    }
-    if (cb) cb(err || null);
-  });
+const hardUnbanIp = async (ip) => {
+  const key = normalizeIp(ip);
+  if (!isIP(key)) throw new Error('IP 格式不正确');
+  await query('DELETE FROM script_guard_bans WHERE ip = $1', [key]);
+  pushLiveLog('info', `脚本护栏：已解除硬封禁 ${key}`, { kind: 'system' });
 };
 
-const listHardBans = () => {
-  const now = Date.now();
-  return [...hardBans.entries()]
-    .map(([ip, v]) => ({
-      ip,
-      reason: v.reason,
-      created_at: v.createdAt,
-      expires_at: v.expiresAt ? new Date(v.expiresAt).toISOString() : null,
-      permanent: !v.expiresAt,
-      remainMs: v.expiresAt ? Math.max(0, v.expiresAt - now) : 0,
-      hits: v.hits || 0
-    }))
-    .sort((a, b) => b.hits - a.hits);
+const listHardBans = async () => {
+  const { rows } = await query(
+    `SELECT *, expires_at IS NULL AS permanent,
+       CASE WHEN expires_at IS NULL THEN 0 ELSE GREATEST(0, floor(extract(epoch FROM (expires_at - clock_timestamp())) * 1000)) END AS "remainMs"
+     FROM script_guard_bans WHERE expires_at IS NULL OR expires_at > clock_timestamp() ORDER BY hits DESC`);
+  return rows.map(row => ({ ...row, hits: Number(row.hits), remainMs: Number(row.remainMs) }));
 };
 
-/** 硬封禁中间件：挂在最前面（静态资源与 SPA 兜底之前），名单为空时零开销 */
-const hardBanGuard = (req, res, next) => {
-  if (hardBans.size === 0) return next();
-  const path = req.path || '';
-  if (ADMIN_EXEMPT_RE.some((re) => re.test(path))) return next();
-
+const hardBanGuard = async (req, res, next) => {
+  if (ADMIN_EXEMPT_RE.some(re => re.test(req.path || ''))) return next();
   const ip = getClientIp(req);
-  const ban = hardBans.get(ip);
-  if (!ban) return next();
-
-  const now = Date.now();
-  if (ban.expiresAt && ban.expiresAt <= now) {
-    hardUnbanIp(ip);
-    return next();
-  }
-
-  ban.hits += 1;
-
-  const retryAfterSec = ban.expiresAt ? Math.ceil((ban.expiresAt - now) / 1000) : 0;
-  res.set('Cache-Control', 'no-store');
-  res.set('X-Robots-Tag', 'noindex');
-  if (retryAfterSec > 0) res.set('Retry-After', String(retryAfterSec));
-  res
-    .status(429)
-    .type('html')
-    .send(
-      warningPage({
-        ip,
-        ua: req.headers['user-agent'],
-        path: req.originalUrl,
-        retryAfterSec,
-        strikes: 0
-      })
-    );
+  const { rows } = await query(
+    `UPDATE script_guard_bans SET hits = hits + 1
+     WHERE ip = $1 AND (expires_at IS NULL OR expires_at > clock_timestamp())
+     RETURNING CASE WHEN expires_at IS NULL THEN 0 ELSE CEIL(extract(epoch FROM (expires_at - clock_timestamp()))) END AS retry_after`,
+    [ip]);
+  if (!rows[0]) return next();
+  return sendWarning(res, { ip, ua: req.headers['user-agent'], path: req.originalUrl,
+    retryAfterSec: Math.max(0, Number(rows[0].retry_after)), strikes: 0 });
 };
 
 /* ------------------------------ 中间件 ------------------------------ */
@@ -605,92 +379,40 @@ const OFFICIAL_CRAWLER_UA_RE =
 const SEO_EXEMPT_PATHS = new Set(['/robots.txt', '/sitemap.xml', '/site.webmanifest']);
 
 /** 挂在 app 级（index.cjs 里 app.use），全站生效，后台管理路径在内部豁免 */
-const scriptGuard = (req, res, next) => {
-  if (!GUARD_ENABLED) return next();
-  // 后台管理路径豁免：与硬封禁一致，保证误伤时仍能进后台处理
-  if (ADMIN_EXEMPT_RE.some((re) => re.test(req.path || ''))) return next();
-  // SEO 文件与官方爬虫放行：不计数、不封禁
+const scriptGuard = async (req, res, next) => {
+  if (!guardOptions().enabled) return next();
+  if (ADMIN_EXEMPT_RE.some(re => re.test(req.path || ''))) return next();
   if (SEO_EXEMPT_PATHS.has(req.path || '')) return next();
-  if (OFFICIAL_CRAWLER_UA_RE.test(String(req.headers['user-agent'] || ''))) return next();
-  if (!looksLikeScript(req.headers['user-agent'])) return next();
-
+  const ua = String(req.headers['user-agent'] || '');
+  if (OFFICIAL_CRAWLER_UA_RE.test(ua)) return next();
+  if (!looksLikeScript(ua, await getAllowList())) return next();
   const ip = getClientIp(req);
-
-  const now = Date.now();
-  const entry = getOrCreateEntry(ip);
-  entry.ua = String(req.headers['user-agent'] || '').slice(0, 200);
-  stats.scriptRequests += 1;
-
-  // 已在封禁期：直接弹警告页，不消耗任何配额
-  if (entry.blockedUntil > now) {
-    stats.blocked += 1;
-    return sendWarning(res, {
-      ip,
-      ua: entry.ua,
-      path: req.originalUrl,
-      retryAfterSec: Math.ceil((entry.blockedUntil - now) / 1000),
-      strikes: entry.strikes
-    });
+  const entry = await trackRequest(ip, ua, req.originalUrl);
+  if (Number(entry.remain_ms) > 0 || entry.new_block) {
+    return sendWarning(res, { ip, ua, path: req.originalUrl,
+      retryAfterSec: Math.ceil(Number(entry.remain_ms) / 1000), strikes: entry.strikes });
   }
-
-  entry.hits = entry.hits.filter((t) => now - t < WINDOW_MS);
-
-  if (entry.hits.length >= FREE_HITS) {
-    const hitsUsed = entry.hits.length;
-    const { blockMs, strikes } = applyBlock(entry, {
-      ip,
-      ua: entry.ua,
-      path: req.originalUrl,
-      hitsUsed
-    });
-
-    return sendWarning(res, {
-      ip,
-      ua: entry.ua,
-      path: req.originalUrl,
-      retryAfterSec: Math.ceil(blockMs / 1000),
-      strikes
-    });
-  }
-
-  entry.hits.push(now);
   next();
 };
 
-/** 给后台/诊断用：当前被限制的 IP 一览 */
-const scriptGuardSnapshot = () => {
-  const now = Date.now();
+const scriptGuardSnapshot = async () => {
+  const [{ rows: totals }, { rows: blocked }, allow, page] = await Promise.all([
+    query(`SELECT count(*) AS tracked, COALESCE(sum(script_requests),0) AS requests,
+      COALESCE(sum(warned),0) AS warned, COALESCE(sum(blocked),0) AS blocked, COALESCE(sum(strikes),0) AS strikes
+      FROM script_guard_state`),
+    query(`SELECT ip, ua, strikes, blocked_until - floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS "remainMs"
+      FROM script_guard_state WHERE blocked_until > floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint`),
+    getAllowList(), getPageConfig()
+  ]);
+  const stats = totals[0];
   return {
-    enabled: GUARD_ENABLED,
-    freeHits: FREE_HITS,
-    windowMs: WINDOW_MS,
-    baseBlockMs: BASE_BLOCK_MS,
-    allow: getAllowList(),
-    contactUrl: getPageConfig().contactUrl,
-    stats: { ...stats },
-    tracked: state.size,
-    blocked: [...state.entries()]
-      .filter(([, v]) => v.blockedUntil > now)
-      .map(([ip, v]) => ({ ip, ua: v.ua, strikes: v.strikes, remainMs: v.blockedUntil - now }))
+    ...guardOptions(), allow, contactUrl: page.contactUrl,
+    stats: { scriptRequests: Number(stats.requests), warned: Number(stats.warned),
+      blocked: Number(stats.blocked), strikes: Number(stats.strikes) },
+    tracked: Number(stats.tracked),
+    blocked: blocked.map(row => ({ ...row, remainMs: Number(row.remainMs) }))
   };
 };
-
-/*
- * 定期清理：state 常驻内存，正常只有几个脚本 IP，但不能让它无限长大。
- * unref() 保证这个定时器不会拖住进程退出。
- */
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of state) {
-    const idle = entry.blockedUntil < now && entry.hits.every((t) => now - t >= WINDOW_MS);
-    if (idle) state.delete(ip);
-  }
-}, 30 * 60 * 1000).unref?.();
-
-// 启动载入配置与名单
-loadPageConfig();
-loadHardBans();
-loadAllowList();
 
 module.exports = {
   scriptGuard,

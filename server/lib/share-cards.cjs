@@ -7,8 +7,7 @@
  * 栏目页只做字符串替换；信息页只有抓取器才会去查上游，应用和专题各自缓存。
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
-const fs = require('fs');
-const path = require('path');
+const { bindings, incomingRequest } = require('./runtime.cjs');
 const { getAppGalleryTopic } = require('./appgallery-topics.cjs');
 const { getAppGalleryApp } = require('./appgallery-apps.cjs');
 /*
@@ -20,7 +19,7 @@ const { getAppGalleryApp } = require('./appgallery-apps.cjs');
  * 栏目页只做字符串替换；信息页只有抓取器才会去查华为应用市场（30 分钟内存缓存），
  * 普通用户拿到的仍是静态壳，不增加首屏延迟。
  */
-const SITE_ORIGIN = String(process.env.SITE_ORIGIN || 'https://next.betahub.tech').replace(/\/+$/, '');
+const SITE_ORIGIN = String(process.env.SITE_ORIGIN || 'https://ag.ljlvink.top').replace(/\/+$/, '');
 const SITE_LOGO_URL = `${SITE_ORIGIN}/og-image.png`;
 const SITE_NAME = 'CloseStore';
 const SITE_DEFAULT_DESCRIPTION =
@@ -152,24 +151,16 @@ const fetchTopicShareCard = async (topicId) => {
   }
 };
 
-// dist/index.html 读一次缓存 60s，部署换包后最多 1 分钟生效
-let shareShellCache = { html: '', at: 0 };
-const readShareShell = () =>
-  new Promise((resolve) => {
-    if (shareShellCache.html && Date.now() - shareShellCache.at < 60000) {
-      resolve(shareShellCache.html);
-      return;
-    }
-    // 注意：本文件在 server/lib/ 下，dist 在项目根
-    fs.readFile(path.join(__dirname, '../../dist/index.html'), 'utf8', (err, html) => {
-      if (err) {
-        resolve(shareShellCache.html || '');
-        return;
-      }
-      shareShellCache = { html, at: Date.now() };
-      resolve(html);
-    });
-  });
+// Static assets are versioned with the Worker; no disk or cross-request pending I/O.
+let shareShell;
+const readShareShell = async () => {
+  if (shareShell) return shareShell;
+  const url = new URL('/index.html', incomingRequest().url);
+  const response = await bindings().ASSETS.fetch(new Request(url));
+  if (!response.ok) return '';
+  shareShell = await response.text();
+  return shareShell;
+};
 
 /** 把卡片信息写进 HTML 的 meta 里 */
 const applyShareCardToHtml = (html, card) => {

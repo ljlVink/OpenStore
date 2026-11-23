@@ -1,23 +1,22 @@
 node_modules
 dist
 .env
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
 .DS_Store
 *.local
 
 nginx
 
-# Database
+# SQLite 快照（旧版数据），不要提交
 *.db
-# WAL 模式下的旁挂文件（切到 WAL 后会出现，绝对不要提交）
-*.db-wal
-*.db-shm
 *.sqlite
 *.sqlite3
 
-# Server secrets and uploads
+# Server secrets
 server/secret.key
-server/uploads/*
-!server/uploads/.gitkeep
 
 # Server-side caches
 server/.cache

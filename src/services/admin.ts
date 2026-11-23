@@ -164,18 +164,8 @@ export interface DatabaseTableInfo {
 }
 
 export interface DatabaseOverview {
-  file: { path: string; sizeBytes: number; mtime: string | null; walBytes?: number; shmBytes?: number };
-  sqlite: { version: string };
-  pragmas: {
-    pageSize: number;
-    pageCount: number;
-    freelistCount: number;
-    journalMode: string;
-    autoVacuum: number;
-    encoding: string;
-  };
-  freeBytes: number;
-  counts: { tables: number; indexes: number; views: number; triggers: number; totalRows: number };
+  postgres: { name: string; version: string; sizeBytes: number };
+  counts: { tables: number; indexes: number; views: number; totalRows: number };
   tables: DatabaseTableInfo[];
 }
 
@@ -201,10 +191,6 @@ export const getDatabaseTable = async (
   return data as DatabaseTableData;
 };
 
-export const runDatabaseMaintenance = async (action: string) => {
-  const { data } = await api.post('/database/maintenance', { action });
-  return data as { action: string; label: string; durationMs: number; rows: Array<Record<string, unknown>> };
-};
 
 export const runDatabaseQuery = async (sql: string) => {
   const { data } = await api.post('/database/query', { sql });
@@ -217,19 +203,6 @@ export const runDatabaseQuery = async (sql: string) => {
   };
 };
 
-/** 下载数据库快照（后端用 VACUUM INTO 生成一致副本，含 WAL 里尚未合并的数据） */
-export const downloadDatabaseBackup = async () => {
-  const response = await api.get('/database/backup', { responseType: 'blob' });
-  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `visitors-${stamp}.db`);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-};
 
 /** 警告页预览：只取示例 HTML，不拦截、不消耗配额 */
 export const getScriptGuardPreview = async () => {

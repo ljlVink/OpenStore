@@ -98,17 +98,6 @@ export const login = async (username: string, password: string): Promise<{ token
   return response.data;
 };
 
-// Upload
-export const uploadFile = async (file: File): Promise<{ url: string }> => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const response = await apiClient.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return response.data;
-};
-
-
 // 专题（Substance）：华为应用市场「探索」页
 export interface ShortAppInfo {
   app_id: string;

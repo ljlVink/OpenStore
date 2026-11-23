@@ -1,34 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
-const db = require('./database.cjs');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { extname } = require('node:path');
+const { defer, markAssetFallback } = require('./lib/runtime.cjs');
 
-// 出站 HTTP 默认配置，须在 dotenv 之后加载
 require('./lib/upstream-http.cjs').applyAxiosDefaults();
-
-// 拆分出去的内部模块（注意：必须在 dotenv.config 之后加载，它们会读 process.env）
 const { pushLiveLog } = require('./lib/live-log.cjs');
 
-/*
- * 进程级兜底：未捕获异常 / 未处理的 Promise rejection 默认直接退出进程，
- * 在 pm2 下就是「服务反复重启」。这里记完整堆栈并让进程继续跑，
- * 避免一条请求或一个定时器的异常把整个服务带走。
- */
-const reportFatal = (label, err) => {
-  const detail = err && err.stack ? err.stack : String(err);
-  console.error(`[${label}]`, detail);
-  try {
-    pushLiveLog('error', `${label}: ${detail.split('\n')[0]}`);
-  } catch {
-    /* 日志模块本身出问题时不再套一层 */
-  }
-};
-
-process.on('unhandledRejection', (reason) => reportFatal('unhandledRejection', reason));
-process.on('uncaughtException', (err) => reportFatal('uncaughtException', err));
 const {
   SITE_ORIGIN,
   SITE_LOGO_URL,
@@ -42,18 +19,14 @@ const {
   applyShareCardToHtml,
   applyCanonicalToHtml
 } = require('./lib/share-cards.cjs');
-const { attachWebSocket } = require('./lib/realtime.cjs');
 const { hardBanGuard, scriptGuard } = require('./lib/script-guard.cjs');
-const { JWT_SECRET, requireAuth } = require('./middleware/auth.cjs');
-const { TRUST_PROXY_HOPS, PORT } = require('./lib/config.cjs');
-const { uploadsDir, UPLOAD_FORCE_DOWNLOAD_EXT } = require('./lib/uploads.cjs');
+const { requireAuth } = require('./middleware/auth.cjs');
 const seoSubmit = require('./lib/seo-submit.cjs');
 const { getSitemap, invalidateSitemapCache } = require('./lib/sitemap.cjs');
 const { canonicalPathFor } = require('./lib/canonical.cjs');
 const { applyJsonLdToHtml, buildAppJsonLd } = require('./lib/json-ld.cjs');
 
 const app = express();
-app.set('trust proxy', TRUST_PROXY_HOPS);
 
 app.use(cors());
 
@@ -66,7 +39,7 @@ app.use(hardBanGuard);
 // 将合法 JSON 中的非对象值归一成 {}，避免各写接口解构 req.body 时报错。
 app.use(express.json({ strict: false }));
 app.use((req, res, next) => {
-  // 只处理 JSON 请求体，避免影响 multipart 等其它类型的请求
+  // 保留非 JSON 请求体的原样处理。
   const isJsonBody = String(req.headers['content-type'] || '').includes('application/json');
   if (isJsonBody && (req.body === null || typeof req.body !== 'object')) {
     req.body = {};
@@ -100,27 +73,7 @@ app.use((req, res, next) => {
  */
 app.use(scriptGuard);
 
-// Ensure /uploads is served correctly before SPA fallback
-/*
- * /uploads 必须保持匿名可读（公开内容中的图片等需要正常展示），
- * 但加了三点硬化，避免上传的文件在你的域名下被当成页面执行：
- *   1. nosniff：不让浏览器猜类型；
- *   2. html/svg/xml/js 这类能执行脚本的扩展名一律强制下载，不作为页面打开；
- *   3. 关掉目录索引。
- */
-app.use(
-  '/uploads',
-  (req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    if (UPLOAD_FORCE_DOWNLOAD_EXT.test(path.extname(req.path || ''))) {
-      res.setHeader('Content-Disposition', 'attachment');
-    }
-    next();
-  },
-  express.static(uploadsDir, { index: false, dotfiles: 'ignore' })
-);
-
-/** IndexNow key 文件：内容为 key 本身，搜索引擎据此验证站点归属。须排在 express.static 之前 */
+/** IndexNow key 文件：内容为 key 本身，搜索引擎据此验证站点归属。 */
 app.get('/indexnow-key.txt', async (req, res) => {
   try {
     const config = await seoSubmit.loadConfig();
@@ -131,7 +84,7 @@ app.get('/indexnow-key.txt', async (req, res) => {
   }
 });
 
-/** 动态 sitemap.xml：含应用详情页，须排在 express.static 之前以覆盖构建期文件。生成失败时回退静态文件 */
+/** 生成失败时由 Worker 回退到构建期静态文件。 */
 app.get('/sitemap.xml', async (req, res, next) => {
   try {
     const config = await seoSubmit.loadConfig();
@@ -152,8 +105,8 @@ app.use(async (req, res, next) => {
   if (!accept.includes('text/html')) return next();
 
   const rawPath = req.path || '/';
-  if (/^\/(api|uploads|admin)(\/|$)/.test(rawPath)) return next();
-  if (path.extname(rawPath)) return next();
+  if (/^\/(api|admin)(\/|$)/.test(rawPath)) return next();
+  if (extname(rawPath)) return next();
 
   const cleanPath = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : '/';
   const appMatch = /^\/apps\/([^/]+)$/.exec(cleanPath);
@@ -227,16 +180,13 @@ app.use(async (req, res, next) => {
   res.send(applyJsonLdToHtml(applyCanonicalToHtml(htmlWithCard, canonicalUrl), appJsonLd));
 });
 
-// 静态资源排在 /uploads 之后，否则 /uploads 会被 SPA 兜底或这里的静态中间件截走
-app.use(express.static(path.join(__dirname, '../dist')));
-
 /**
  * 前台路由切换时上报当前路径，只用于 SEO 收录队列。
  * 不记录 IP / UA / 归属地等任何访客信息；enqueuePath 内部做过滤与归一。
  */
 app.get('/api/public/track', (req, res) => {
   const pagePath = typeof req.query.path === 'string' ? req.query.path : '';
-  if (pagePath && !pagePath.startsWith('/admin')) seoSubmit.enqueuePath(pagePath);
+  if (pagePath && !pagePath.startsWith('/admin')) defer(seoSubmit.enqueuePath(pagePath));
   res.json({ ok: true });
 });
 
@@ -244,130 +194,34 @@ app.get('/api/public/track', (req, res) => {
 app.get('/api/v0/charts/rating', (req, res) => {
   res.json({ status: 'ok', version: 'v0' });
 });
-/*
- * ---- 路由挂载 ----
- * 挂载顺序与匹配顺序一致，兜底路由放在业务路由之后。
- * 每个 router 内部写的都是完整路径，所以统一挂在根路径上。
- *
- * 注意：本文件不在这里面注册任何业务路由，全部在 server/routes/ 下。
- */
-/*
- * 挂载时顺手记一笔，启动后打印「哪个模块挂了多少条路由」的摘要。
- * 拆成多个文件之后，光看目录不好确认有没有漏挂，这段输出就是给这个用的。
- */
-const mountedRouters = [];
-const mountRouter = (name, router) => {
-  mountedRouters.push({ name, router });
-  app.use(router);
-};
+app.use(require('./routes/admin-ops.cjs')());
+app.use(require('./routes/media.cjs'));
+app.use(require('./routes/database.cjs'));
+app.use(require('./routes/incidents.cjs'));
+app.use(require('./routes/public-content.cjs'));
+app.use(require('./routes/diagnostics.cjs'));
+app.use(require('./routes/logs.cjs'));
+app.use(require('./routes/seo.cjs')({ onConfigChange: invalidateSitemapCache }));
+app.use(require('./routes/auth.cjs'));
 
-mountRouter('admin-ops', require('./routes/admin-ops.cjs')()); // 脚本护栏
-mountRouter('media', require('./routes/media.cjs'));          // 应用截图同源代理、文件上传、上传目录
-mountRouter('database', require('./routes/database.cjs'));    // 数据库管理
-mountRouter('incidents', require('./routes/incidents.cjs'));  // 服务事故 / 维护公告
-mountRouter('public-content', require('./routes/public-content.cjs')); // 前台公开内容：应用、专题
-mountRouter('diagnostics', require('./routes/diagnostics.cjs'));   // 客户端 IP 诊断
-mountRouter('logs', require('./routes/logs.cjs'));           // 操作日志
-/*
- * SEO 收录提交（/api/admin/seo/*）。
- *
- * 必须挂在下面 `/api/admin` 闸门之前：闸门自身不响应，只是改写 req.url 后二次分发，
- * 业务路由要在它之前才能匹配到完整路径。挂在闸门之后会因前缀被重复补写而自我重入，
- * 直至 RangeError: Maximum call stack size exceeded。
- * 代价是闸门拦不到本路由，故鉴权在路由内部声明（routes/seo.cjs）。
- */
-mountRouter('seo', require('./routes/seo.cjs')({ onConfigChange: invalidateSitemapCache }));
-
-/** 统计一个 router 里注册的路由条数 */
-const countRouterRoutes = (router) => (router.stack || []).filter((layer) => layer.route).length;
-
-/** 递归统计挂在 app 上的全部路由（含各子 router），用来核对总数 */
-const countAppRoutes = (stack) =>
-  (stack || []).reduce((sum, layer) => {
-    if (layer.route) return sum + 1;
-    const handle = layer.handle;
-    return sum + (handle && Array.isArray(handle.stack) ? countAppRoutes(handle.stack) : 0);
-  }, 0);
-
-/*
- * 启动摘要。拆成多文件之后，光看目录不好确认有没有哪个模块漏挂，
- * 这段输出一眼就能看出来：条数对不对、入口直连的是哪几条。
- */
-const printStartupSummary = () => {
-  const perRouter = mountedRouters.map(({ name, router }) => ({ name, count: countRouterRoutes(router) }));
-  const inRouters = perRouter.reduce((sum, item) => sum + item.count, 0);
-  const total = countAppRoutes(app.router && app.router.stack);
-
-  console.log(`[startup] 端口 ${PORT} · 代理信任跳数 ${TRUST_PROXY_HOPS} · Node ${process.version} · PID ${process.pid}`);
-  console.log(`[startup] 共 ${total} 条路由 = ${perRouter.length} 个路由模块（${inRouters} 条）+ 入口直连 ${total - inRouters} 条`);
-  const width = Math.max(...perRouter.map((r) => r.name.length));
-  for (const { name, count } of perRouter) {
-    console.log(`[startup]   ${name.padEnd(width)}  ${String(count).padStart(3)} 条`);
-  }
-};
-
-// Upgrade HTTP -> WS
-const server = require('http').createServer(app);
-attachWebSocket(server, { jwtSecret: JWT_SECRET });
-
-server.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
-  printStartupSummary();
-
-  /*
-   * SEO 收录提交的定时任务：每 60 秒检查一次是否到达配置的提交时刻（submitHour），
-   * 因此改配置无需重启进程。总开关或自动提交关闭时不做任何出站请求。
-   */
-  seoSubmit.startScheduler();
-  console.log('[startup] SEO 收录提交定时任务已启动（可在后台「SEO 收录」面板调整频率或关闭）');
-});
-
-
-// ADMIN_PASSWORD 只用于首次创建账号；已存在的密码以 SQLite 为准。
-db.get(`SELECT 1 FROM users WHERE username=?`, ['admin'], (err, row) => {
-  if (err) return console.error('[auth] 检查管理员账号失败：', err);
-  if (row) return;
-
-  const configuredPassword = String(process.env.ADMIN_PASSWORD || '').trim();
-  const initialPassword = configuredPassword || crypto.randomBytes(12).toString('base64url');
-  db.run(
-    `INSERT INTO users (username, password_hash, role) VALUES (?,?,?) ON CONFLICT(username) DO NOTHING`,
-    ['admin', bcrypt.hashSync(initialPassword, 10), 'admin'],
-    function (insertErr) {
-      if (insertErr) return console.error('[auth] 创建管理员账号失败：', insertErr);
-      if (!configuredPassword && this.changes) {
-        console.warn('[security] 未配置 ADMIN_PASSWORD，已生成随机初始密码。请登录后台修改密码。');
-        console.warn(`[security] admin 初始密码: ${initialPassword}`);
-      }
-    }
-  );
-});
-
-// 登录相关接口（原文件里就排在定时任务 / 建管理员账号之后）
-mountRouter('auth', require('./routes/auth.cjs'));            // 登录 / 刷新 token / 改密码
-
-/*
- * /api/admin 的兜底鉴权闸门：处理未被前面业务路由接住的 /api/admin 请求。
- *
- * 仅作兜底 —— 排在它前面的业务路由会先响应，闸门不会执行，
- * 因此对外的后台路由（如 seo）各自在路由内声明 requireAuth。
- *
- * req.url 只补回 /api：app.use 已剥掉 /api/admin。若补全 /api/admin，
- * 二次分发时 router 会再剥一次同一前缀，导致自我重入至栈溢出。
- */
-app.use('/api/admin', (req, res, next) => {
-  if (req.url.startsWith('/auth/')) return next();
-  return requireAuth(req, res, () => {
-    req.url = `/api${req.url}`;
-    app.handle(req, res, next);
-  });
-});
+// 已注册的后台路由各自鉴权；未匹配的后台 API 也不暴露给匿名请求。
+app.use('/api/admin', requireAuth);
 
 // 未匹配的 API 不回退到前端页面。
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
-// SPA Fallback - Must be last
-app.get(/(.*)/, (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+app.get(/.*/, (_req, res) => {
+  markAssetFallback();
+  res.status(204).end();
 });
-  
+
+app.use((error, _req, res, next) => {
+  if (res.headersSent) return next(error);
+  const clientError = error.status >= 400 && error.status < 500;
+  if (!clientError) console.error('[request]', error);
+  res.status(clientError ? error.status : 500).json({
+    error: clientError ? error.message : 'Internal server error',
+  });
+});
+
+module.exports = app;

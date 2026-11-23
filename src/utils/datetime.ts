@@ -1,15 +1,12 @@
 /*
- * SQLite 时间戳的展示格式化。
+ * 数据库时间戳的展示格式化。
  *
- * 后端时间戳统一按 UTC 存储（SQLite 的 datetime('now') 即 UTC），格式为
- * "YYYY-MM-DD HH:MM:SS"，**不带时区标记**。
- * 直接把这种字符串交给 new Date() 会被当成「本地时间」解析：在 UTC+8 的机器上
- * 于北京时间 01:26 提交的记录（库中 17:26）会显示成 17:26，日期还会差一天。
- *
- * 所以这里先按 UTC 解析（补 Z，并把空格换成 T）再转北京时间展示。
+ * PostgreSQL 的 TIMESTAMPTZ 经接口输出为带 Z 的 ISO 字符串；不带时区标记的
+ * "YYYY-MM-DD HH:MM:SS" 一律按 UTC 解释。直接交给 new Date() 会被当成「本地时间」，
+ * 在 UTC+8 的机器上日期和时刻都会错位，所以这里先补 Z 再转北京时间展示。
  */
 
-/** SQLite 时间戳 → Date（按 UTC 解释） */
+/** 数据库时间戳 → Date（无时区标记时按 UTC 解释） */
 export const parseDbTime = (value: string | number | Date | null | undefined): Date | null => {
   if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
