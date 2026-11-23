@@ -4,8 +4,6 @@
   "main": "server/worker.mjs",
   "compatibility_date": "2026-08-12",
   "compatibility_flags": ["enable_nodejs_http_server_modules"],
-  // 固定在香港（AWS ap-east-1）附近运行，离华为上游更近
-  "placement": { "region": "aws:ap-east-1" },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
